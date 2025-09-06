@@ -174,19 +174,45 @@ class NYFFScraper:
         country = ""
         runtime = ""
 
-        metadata_ps = element.select('p[data-typography-mobile="body-xs"]')
-        for p in metadata_ps:
-            text = p.get_text(strip=True)
-            if '|' in text:
-                # This is likely the year|country|runtime line
-                parts = [part.strip() for part in text.split('|')]
-                if len(parts) >= 1 and parts[0].isdigit():
-                    year = parts[0]
-                if len(parts) >= 2:
-                    country = parts[1]
-                if len(parts) >= 3 and ('minute' in parts[2].lower() or parts[2].replace(' ', '').isdigit()):
-                    runtime = parts[2]
-                break
+        # Strategy 1: Look for flex container with metadata paragraphs
+        flex_container = element.select_one('div.flex.flex-wrap')
+        if flex_container:
+            metadata_ps = flex_container.select('p[data-typography-mobile="body-xs"]')
+            
+            for p in metadata_ps:
+                text = p.get_text(strip=True)
+                # Remove the separator "|" from text
+                clean_text = text.replace('|', '').strip()
+                
+                # Check if it's a year (4 digits)
+                if clean_text.isdigit() and len(clean_text) == 4:
+                    year = clean_text
+                # Check if it contains "minutes" (runtime)
+                elif 'minute' in clean_text.lower():
+                    runtime = clean_text
+                # Check if it contains "subtitle" (usually follows country)
+                elif 'subtitle' in clean_text.lower():
+                    # This is the subtitle line, skip it
+                    continue
+                # Otherwise, assume it's country (if not already found and not empty)
+                elif not country and clean_text and clean_text not in [year, runtime]:
+                    country = clean_text
+        
+        # Strategy 2: Fallback to original method
+        if not year and not country and not runtime:
+            metadata_ps = element.select('p[data-typography-mobile="body-xs"]')
+            for p in metadata_ps:
+                text = p.get_text(strip=True)
+                if '|' in text:
+                    # This is likely the year|country|runtime line
+                    parts = [part.strip() for part in text.split('|')]
+                    if len(parts) >= 1 and parts[0].isdigit():
+                        year = parts[0]
+                    if len(parts) >= 2:
+                        country = parts[1]
+                    if len(parts) >= 3 and ('minute' in parts[2].lower() or parts[2].replace(' ', '').isdigit()):
+                        runtime = parts[2]
+                    break
 
         return year, country, runtime
 

@@ -279,6 +279,140 @@ class IMDbEnricher:
             
         logger.debug(f"No theatrical release date found for {imdb_id}")
         return None
+    
+    def get_country_and_runtime(self, imdb_id: str) -> tuple[str, str]:
+        """Get country and runtime from IMDb main page.
+        
+        Args:
+            imdb_id: IMDb ID (e.g., "tt1234567")
+            
+        Returns:
+            Tuple of (country, runtime) strings
+        """
+        url = f"https://www.imdb.com/title/{imdb_id}/"
+        filename = f"imdb_main_{imdb_id}.html"
+        content = self.get_cached_or_fetch(url, filename)
+        
+        if not content:
+            return "", ""
+            
+        soup = BeautifulSoup(content, 'html.parser')
+        country = ""
+        runtime = ""
+        
+        # Strategy 1: Extract from JSON-LD structured data and other script tags
+        try:
+            import json
+            
+            # Check all script tags for both JSON-LD and other JSON data
+            script_tags = soup.find_all('script')
+            for script in script_tags:
+                try:
+                    script_content = script.string or ""
+                    
+                    # Handle JSON-LD scripts
+                    if script.get('type') == 'application/ld+json':
+                        data = json.loads(script_content)
+                        if isinstance(data, dict):
+                            # Get runtime from duration field (ISO 8601 format like "PT2H11M")
+                            if 'duration' in data and not runtime:
+                                duration = data['duration']
+                                runtime = self._parse_iso_duration(duration)
+                    
+                    # Handle other script tags that might contain countriesOfOrigin
+                    elif 'countriesOfOrigin' in script_content and not country:
+                        # Look for countriesOfOrigin pattern
+                        import re
+                        country_match = re.search(r'"countriesOfOrigin":\s*\{\s*"countries":\s*\[\s*\{\s*"id":\s*"([^"]+)"', script_content)
+                        if country_match:
+                            country = country_match.group(1)  # Use country code directly (AR, IT, US, etc.)
+                            
+                except (json.JSONDecodeError, AttributeError, TypeError):
+                    continue
+        except Exception:
+            pass
+        
+        # Strategy 2: Extract runtime from meta description (e.g., "2h 11m")
+        if not runtime:
+            try:
+                og_desc = soup.find('meta', property='og:description')
+                if og_desc:
+                    desc_content = og_desc.get('content', '')
+                    # Look for patterns like "2h 11m" or "131 min"
+                    import re
+                    time_match = re.search(r'(\d+h\s*\d+m|\d+\s*min)', desc_content)
+                    if time_match:
+                        runtime = time_match.group(1)
+            except Exception:
+                pass
+        
+        # Strategy 3: Look for country in the page content
+        if not country:
+            try:
+                # Look for country information in various places
+                country_selectors = [
+                    '[data-testid="title-details-origin"]',
+                    'a[href*="/country/"]',
+                    'li:contains("Country")',
+                ]
+                
+                for selector in country_selectors:
+                    try:
+                        if ':contains(' in selector:
+                            # Handle text-based selector
+                            elements = soup.find_all('li')
+                            for elem in elements:
+                                elem_text = elem.get_text().lower()
+                                if 'country' in elem_text and 'origin' in elem_text:
+                                    # Extract country from this element
+                                    links = elem.find_all('a')
+                                    for link in links:
+                                        href = link.get('href', '')
+                                        if '/country/' in href:
+                                            country = link.get_text(strip=True)
+                                            break
+                                    if country:
+                                        break
+                        else:
+                            elements = soup.select(selector)
+                            for element in elements:
+                                country = element.get_text(strip=True)
+                                if country:
+                                    break
+                        if country:
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+        
+        logger.debug(f"Extracted from {imdb_id}: country='{country}', runtime='{runtime}'")
+        return country, runtime
+    
+    def _parse_iso_duration(self, duration: str) -> str:
+        """Parse ISO 8601 duration format to human readable.
+        
+        Args:
+            duration: ISO duration like "PT2H11M"
+            
+        Returns:
+            Human readable duration like "2h 11m"
+        """
+        try:
+            import re
+            # Parse PT2H11M format
+            match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?', duration)
+            if match:
+                hours, minutes = match.groups()
+                parts = []
+                if hours:
+                    parts.append(f"{hours}h")
+                if minutes:
+                    parts.append(f"{minutes}m")
+                return " ".join(parts) if parts else ""
+        except Exception:
+            pass
+        return ""
 
     def get_company_credits(self, imdb_id: str) -> Dict[str, List[str]]:
         """Get production companies and distributors from IMDb company credits.
@@ -385,6 +519,14 @@ class IMDbEnricher:
                 # Get theatrical release date
                 theatrical_release_date = self.get_theatrical_release_date(imdb_id)
                 film['theatrical_release_date'] = theatrical_release_date
+                
+                # Get country and runtime from IMDb if not already present
+                if not film.get('country') or not film.get('runtime'):
+                    country, runtime = self.get_country_and_runtime(imdb_id)
+                    if not film.get('country'):
+                        film['country'] = country
+                    if not film.get('runtime'):
+                        film['runtime'] = runtime
             else:
                 film['production_companies'] = []
                 film['distributors'] = []
