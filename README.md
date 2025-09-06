@@ -11,7 +11,6 @@ A Python tool for scraping the New York Film Festival (NYFF) website and enrichi
 - **Trailer Discovery**: Search for and link YouTube trailers
 - **Multiple Export Formats**: Generate JSON, CSV, and Markdown outputs
 - **Fast & Cacheable**: Built-in caching system for efficient re-runs
-- **Extensible Design**: Easy to adapt for other film festivals
 
 ## Quick Start
 
@@ -41,6 +40,17 @@ nyff-scraper --skip-trailers
 # Export only specific formats
 nyff-scraper --csv-only
 ```
+
+## Output Formats
+
+### JSON
+Complete structured data with all film information, showtimes, and metadata. This is the most appropriate format for uploading to an LLM and asking it questions about what you might want to see at NYFF this year.
+
+### CSV
+Flattened data suitable for spreadsheet analysis with one row per showtime.
+
+### Markdown
+Human-readable format perfect for documentation and sharing.
 
 ## Installation Options
 
@@ -118,17 +128,6 @@ films = trailer_enricher.enrich_films(films, search_trailers=True)
 # Export to all formats
 export_all_formats(films, "my_films")
 ```
-
-## Output Formats
-
-### JSON
-Complete structured data with all film information, showtimes, and metadata. This is the most appropriate format for uploading to an LLM and asking it questions about what you might want to see at NYFF this year.
-
-### CSV
-Flattened data suitable for spreadsheet analysis with one row per showtime.
-
-### Markdown
-Human-readable format perfect for documentation and sharing.
 
 ## Command Line Options
 
