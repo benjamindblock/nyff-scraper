@@ -76,6 +76,71 @@ class IMDbEnricher:
         logger.warning(f"No IMDb ID found for '{film_title}'")
         return None
     
+    def get_theatrical_release_date(self, imdb_id: str) -> Optional[str]:
+        """Get theatrical release date from IMDb main page.
+        
+        Args:
+            imdb_id: IMDb ID (e.g., "tt1234567")
+            
+        Returns:
+            Theatrical release date string or None if not found
+        """
+        url = f"https://www.imdb.com/title/{imdb_id}/"
+        filename = f"imdb_main_{imdb_id}.html"
+        content = self.get_cached_or_fetch(url, filename)
+        
+        if not content:
+            return None
+            
+        soup = BeautifulSoup(content, 'html.parser')
+        
+        # Look for release date information
+        release_selectors = [
+            'li[data-testid="title-pc-principal-credit"]:contains("Release date")',
+            '.titlereference-overview-section li:contains("Release")',
+            '[data-testid="title-details-releasedate"]',
+            'span:contains("Release date") + span',
+            'h4:contains("Release Date") + ul li'
+        ]
+        
+        for selector in release_selectors:
+            try:
+                elements = soup.select(selector)
+                for element in elements:
+                    text = element.get_text(strip=True)
+                    # Look for date patterns like "March 15, 2024", "15 March 2024", etc.
+                    date_match = re.search(r'(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})', text, re.I)
+                    if date_match:
+                        return date_match.group(1)
+                    # Alternative format: Month Day, Year
+                    date_match = re.search(r'((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4})', text, re.I)
+                    if date_match:
+                        return date_match.group(1)
+            except Exception:
+                continue
+                
+        # Fallback: look for any date in the general structure
+        try:
+            # Look for structured data or meta tags
+            script_tags = soup.find_all('script', type='application/ld+json')
+            for script in script_tags:
+                try:
+                    import json
+                    data = json.loads(script.string)
+                    if isinstance(data, dict) and 'datePublished' in data:
+                        return data['datePublished']
+                    elif isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict) and 'datePublished' in item:
+                                return item['datePublished']
+                except (json.JSONDecodeError, AttributeError):
+                    continue
+        except Exception:
+            pass
+            
+        logger.debug(f"No theatrical release date found for {imdb_id}")
+        return None
+
     def get_company_credits(self, imdb_id: str) -> Dict[str, List[str]]:
         """Get production companies and distributors from IMDb company credits.
         
@@ -176,10 +241,15 @@ class IMDbEnricher:
                 credits = self.get_company_credits(imdb_id)
                 film.update(credits)
                 film['imdb_id'] = imdb_id
+                
+                # Get theatrical release date
+                theatrical_release_date = self.get_theatrical_release_date(imdb_id)
+                film['theatrical_release_date'] = theatrical_release_date
             else:
                 film['production_companies'] = []
                 film['distributors'] = []
                 film['imdb_id'] = None
+                film['theatrical_release_date'] = None
             
             # Keep legacy field for backwards compatibility
             # The new logic will be handled by MetadataEnricher

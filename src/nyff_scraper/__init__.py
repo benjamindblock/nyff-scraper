@@ -12,6 +12,7 @@ from .scraper import NYFFScraper
 from .imdb_enricher import IMDbEnricher
 from .trailer_enricher import TrailerEnricher
 from .metadata_enricher import MetadataEnricher
+from .distribution_scorer import DistributionLikelihoodScorer
 from .exporters import JSONExporter, CSVExporter, MarkdownExporter
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "IMDbEnricher", 
     "TrailerEnricher",
     "MetadataEnricher",
+    "DistributionLikelihoodScorer",
     "JSONExporter",
     "CSVExporter", 
     "MarkdownExporter"

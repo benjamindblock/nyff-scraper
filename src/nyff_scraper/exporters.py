@@ -43,27 +43,29 @@ class CSVExporter:
         csv_rows = []
         
         for film in films:
-            # Get basic film info
+            # Get basic film info in requested field order
             title = film.get('title', '')
             director = film.get('director', '')
             year = film.get('year', '')
             country = film.get('country', '')
             runtime = film.get('runtime', '')
             description = film.get('description', '')
+            category = film.get('category', 'feature')
+            is_short_program = 'TRUE' if film.get('is_short_program', False) else 'FALSE'
+            is_restoration = 'TRUE' if film.get('is_restoration', False) else 'FALSE'
+            has_intro_or_qna = 'TRUE' if film.get('has_intro_or_qna', False) else 'FALSE'
+            notes = film.get('notes', '')
+            
+            # Production and distribution info
             production_companies = '; '.join(film.get('production_companies', []))
             distributors = '; '.join(film.get('distributors', []))
             imdb_id = film.get('imdb_id', '')
+            theatrical_release_date = film.get('theatrical_release_date', '')
+            distribution_likelihood_score = film.get('distribution_likelihood_score', 0)
+            is_likely_to_be_distributed = 'TRUE' if film.get('is_likely_to_be_distributed', False) else 'FALSE'
             likely_theatrical = 'TRUE' if film.get('likely_theatrical', False) else 'FALSE'
             trailer_url = film.get('trailer_url', '')
             youtube_search_url = film.get('youtube_search_url', '')
-            
-            # New metadata fields
-            is_short_program = 'TRUE' if film.get('is_short_program', False) else 'FALSE'
-            is_restoration = 'TRUE' if film.get('is_restoration', False) else 'FALSE'
-            is_likely_to_be_distributed = 'TRUE' if film.get('is_likely_to_be_distributed', False) else 'FALSE'
-            has_intro_or_qna = 'TRUE' if film.get('has_intro_or_qna', False) else 'FALSE'
-            category = film.get('category', 'feature')
-            notes = film.get('notes', '')
             
             # Handle showtimes - create one row per showtime
             showtimes = film.get('nyff_showtimes', [])
@@ -77,6 +79,11 @@ class CSVExporter:
                         'Country': country,
                         'Runtime': runtime,
                         'Description': description,
+                        'Category': category,
+                        'Is_Short_Program': is_short_program,
+                        'Is_Restoration': is_restoration,
+                        'Has_Intro_Or_QnA': has_intro_or_qna,
+                        'Notes': notes,
                         'Date': showtime.get('date', ''),
                         'Time': showtime.get('time', ''),
                         'Venue': showtime.get('venue', ''),
@@ -85,15 +92,12 @@ class CSVExporter:
                         'Production_Companies': production_companies,
                         'Distributors': distributors,
                         'IMDB_ID': imdb_id,
+                        'Theatrical_Release_Date': theatrical_release_date,
+                        'Distribution_Likelihood_Score': distribution_likelihood_score,
+                        'Is_Likely_To_Be_Distributed': is_likely_to_be_distributed,
                         'Likely_Theatrical': likely_theatrical,
                         'Trailer_URL': trailer_url,
-                        'YouTube_Search_URL': youtube_search_url,
-                        'Is_Short_Program': is_short_program,
-                        'Is_Restoration': is_restoration,
-                        'Is_Likely_To_Be_Distributed': is_likely_to_be_distributed,
-                        'Has_Intro_Or_QnA': has_intro_or_qna,
-                        'Category': category,
-                        'Notes': notes
+                        'YouTube_Search_URL': youtube_search_url
                     }
                     csv_rows.append(row)
             else:
@@ -105,6 +109,11 @@ class CSVExporter:
                     'Country': country,
                     'Runtime': runtime,
                     'Description': description,
+                    'Category': category,
+                    'Is_Short_Program': is_short_program,
+                    'Is_Restoration': is_restoration,
+                    'Has_Intro_Or_QnA': has_intro_or_qna,
+                    'Notes': notes,
                     'Date': '',
                     'Time': '',
                     'Venue': '',
@@ -113,26 +122,24 @@ class CSVExporter:
                     'Production_Companies': production_companies,
                     'Distributors': distributors,
                     'IMDB_ID': imdb_id,
+                    'Theatrical_Release_Date': theatrical_release_date,
+                    'Distribution_Likelihood_Score': distribution_likelihood_score,
+                    'Is_Likely_To_Be_Distributed': is_likely_to_be_distributed,
                     'Likely_Theatrical': likely_theatrical,
                     'Trailer_URL': trailer_url,
-                    'YouTube_Search_URL': youtube_search_url,
-                    'Is_Short_Program': is_short_program,
-                    'Is_Restoration': is_restoration,
-                    'Is_Likely_To_Be_Distributed': is_likely_to_be_distributed,
-                    'Has_Intro_Or_QnA': has_intro_or_qna,
-                    'Category': category,
-                    'Notes': notes
+                    'YouTube_Search_URL': youtube_search_url
                 }
                 csv_rows.append(row)
         
-        # Write to CSV
+        # Write to CSV with new field order
         fieldnames = [
             'Title', 'Director', 'Year', 'Country', 'Runtime', 'Description',
+            'Category', 'Is_Short_Program', 'Is_Restoration', 'Has_Intro_Or_QnA', 'Notes',
             'Date', 'Time', 'Venue', 'Showtime_Notes', 'Available',
-            'Production_Companies', 'Distributors', 'IMDB_ID', 
-            'Likely_Theatrical', 'Trailer_URL', 'YouTube_Search_URL',
-            'Is_Short_Program', 'Is_Restoration', 'Is_Likely_To_Be_Distributed',
-            'Has_Intro_Or_QnA', 'Category', 'Notes'
+            'Production_Companies', 'Distributors', 'IMDB_ID',
+            'Theatrical_Release_Date', 'Distribution_Likelihood_Score',
+            'Is_Likely_To_Be_Distributed', 'Likely_Theatrical',
+            'Trailer_URL', 'YouTube_Search_URL'
         ]
         
         with open(filename, 'w', newline='', encoding='utf-8') as f:
@@ -238,9 +245,14 @@ class MarkdownExporter:
                 if flags:
                     f.write(f"**Special Notes:** {', '.join(flags)}\n\n")
                 
-                # Theatrical likelihood
+                # Distribution likelihood with score
+                distribution_score = film.get('distribution_likelihood_score', 0)
                 likely_distributed = film.get('is_likely_to_be_distributed', False)
-                f.write(f"**Likely Distribution:** {'Yes' if likely_distributed else 'Limited'}\n\n")
+                f.write(f"**Distribution Likelihood:** Score {distribution_score}/100 ({'Yes' if likely_distributed else 'Limited'})\n\n")
+                
+                # Theatrical release date if available
+                if film.get('theatrical_release_date'):
+                    f.write(f"**Theatrical Release Date:** {film['theatrical_release_date']}\n\n")
                 
                 # Custom notes
                 if film.get('notes'):

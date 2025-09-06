@@ -7,6 +7,7 @@ Author: Jack Murphy
 import re
 import logging
 from typing import List, Dict, Optional
+from .distribution_scorer import DistributionLikelihoodScorer
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class MetadataEnricher:
     
     def __init__(self):
         """Initialize the metadata enricher."""
-        pass
+        self.distribution_scorer = DistributionLikelihoodScorer()
     
     def is_short_program(self, film: Dict) -> bool:
         """Detect if a film listing is a shorts program.
@@ -106,22 +107,18 @@ class MetadataEnricher:
     def is_likely_to_be_distributed(self, film: Dict) -> bool:
         """Determine if film is likely to get theatrical distribution.
         
-        Updated logic: True if there are more than 2-3 producers and/or at least one distributor.
+        This method is now deprecated in favor of the comprehensive
+        distribution likelihood scoring system.
         
         Args:
             film: Film dictionary
             
         Returns:
-            True if likely to get distribution
+            True if likely to get distribution (based on score >= 50)
         """
-        production_companies = film.get('production_companies', [])
-        distributors = film.get('distributors', [])
-        
-        production_count = len(production_companies)
-        distributor_count = len(distributors)
-        
-        # Updated logic as specified
-        return production_count > 2 or distributor_count >= 1
+        # Use the new comprehensive scoring system
+        score, is_likely, _ = self.distribution_scorer.calculate_distribution_likelihood_score(film)
+        return is_likely
     
     def has_intro_or_qna(self, film: Dict) -> bool:
         """Detect if film has intro or Q&A based on existing notes.
@@ -248,31 +245,33 @@ class MetadataEnricher:
             # Add new boolean fields
             film['is_short_program'] = self.is_short_program(film)
             film['is_restoration'] = self.is_restoration(film)
-            film['is_likely_to_be_distributed'] = self.is_likely_to_be_distributed(film)
             film['has_intro_or_qna'] = self.has_intro_or_qna(film)
             
             # Add category field
             film['category'] = self.categorize_film(film)
             
+            # Use the new comprehensive distribution likelihood scoring
+            enriched_film = self.distribution_scorer.enrich_film_with_distribution_score(film)
+            
             # Clean up existing notes
-            if 'notes' in film:
-                film['notes'] = self.clean_notes(str(film['notes']))
+            if 'notes' in enriched_film:
+                enriched_film['notes'] = self.clean_notes(str(enriched_film['notes']))
             else:
                 # Create structured notes from available data
                 notes_parts = []
                 
-                if film['is_short_program']:
+                if enriched_film['is_short_program']:
                     notes_parts.append("Shorts program")
-                if film['is_restoration']:
+                if enriched_film['is_restoration']:
                     notes_parts.append("Restoration/revival")
-                if film['has_intro_or_qna']:
+                if enriched_film['has_intro_or_qna']:
                     notes_parts.append("Includes intro/Q&A")
-                if not film['is_likely_to_be_distributed']:
+                if not enriched_film['is_likely_to_be_distributed']:
                     notes_parts.append("Limited distribution expected")
                 
-                film['notes'] = "; ".join(notes_parts) if notes_parts else ""
+                enriched_film['notes'] = "; ".join(notes_parts) if notes_parts else ""
             
-            enriched_films.append(film)
+            enriched_films.append(enriched_film)
         
         # Log summary
         short_programs = len([f for f in enriched_films if f.get('is_short_program')])
