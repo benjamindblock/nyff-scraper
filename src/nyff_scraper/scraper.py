@@ -15,6 +15,9 @@ from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_URL = "https://www.filmlinc.org/nyff/nyff63-lineup/"
+DEFAULT_BACKUP_URL = "https://web.archive.org/web/20250831221540/https://www.filmlinc.org/nyff/nyff63-lineup/"
+
 
 class NYFFScraper:
     """Scraper for NYFF film lineup pages."""
@@ -90,21 +93,30 @@ class NYFFScraper:
             logger.error(f"Error fetching {url}: {e}")
             return ""
 
-    def scrape_nyff_lineup(self, url: str = None, force_refresh: bool = False) -> List[Dict]:
+    def scrape_nyff_lineup(self, url: str = None, backup_url: str = None, force_refresh: bool = False) -> List[Dict]:
         """Scrape NYFF lineup page for films and showtimes.
 
         Args:
             url: URL to scrape (defaults to NYFF 2025 lineup)
+            backup_url: Backup URL to scrape (defaults to Wayback Machine NYFF 2025 lineup)
             force_refresh: Force refresh of NYFF cache
 
         Returns:
             List of film dictionaries
         """
         if url is None:
-            url = "https://www.filmlinc.org/nyff/nyff63-lineup/"
+            url = DEFAULT_URL
+
+        if backup_url is None:
+            backup_url = DEFAULT_BACKUP_URL
 
         # Use 45 minute cache age limit for NYFF lineup
         content = self.get_cached_or_fetch(url, "nyff_lineup.html", max_age_minutes=45, force_refresh=force_refresh)
+
+        # Use the backup URL if the primary failed. Also apply a 45 minute cache.
+        if content == "":
+            logger.info(f"Failed to fetch data with primary URL, proceeding with backup URL.")
+            content = self.get_cached_or_fetch(backup_url, "nyff_lineup.html", max_age_minutes=45, force_refresh=force_refresh)
 
         if not content:
             return []

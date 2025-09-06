@@ -59,8 +59,8 @@ class IMDbEnricher:
         
         # Strategy 1: Use advanced search with title and year filter (most reliable)
         advanced_search_url = f"https://www.imdb.com/search/title/?title={quote(clean_title)}&release_date={year}-01-01,{year}-12-31"
-        
-        filename = f"imdb_advanced_search_{re.sub(r'[^\w]', '_', film_title)}.html"
+        underscored_film_title = re.sub(r'[^\w]', '_', film_title)
+        filename = f"imdb_advanced_search_{underscored_film_title}.html"
         content = self.get_cached_or_fetch(advanced_search_url, filename)
         
         if content:
@@ -101,8 +101,8 @@ class IMDbEnricher:
         
         for attempt_num, search_query in enumerate(search_attempts, 1):
             search_url = f"https://www.imdb.com/find/?q={quote(search_query)}&s=tt&ttype=ft"
-            
-            filename = f"imdb_search_{re.sub(r'[^\w]', '_', film_title)}_attempt_{attempt_num}.html"
+            underscored_film_title = re.sub(r'[^\w]', '_', film_title)
+            filename = f"imdb_search_{underscored_film_title}_attempt_{attempt_num}.html"
             content = self.get_cached_or_fetch(search_url, filename)
             
             if not content:
