@@ -37,19 +37,36 @@ class NYFFScraper:
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
 
-    def get_cached_or_fetch(self, url: str, filename: str) -> str:
+    def get_cached_or_fetch(self, url: str, filename: str, max_age_minutes: int = None, force_refresh: bool = False) -> str:
         """Get content from cache or fetch from URL.
 
         Args:
             url: URL to fetch
             filename: Cache filename
+            max_age_minutes: Maximum age of cache file in minutes (None = no age limit)
+            force_refresh: Force refresh even if cache exists
 
         Returns:
             HTML content as string
         """
+        import time as time_module
         cache_path = os.path.join(self.cache_dir, filename)
 
-        if os.path.exists(cache_path):
+        # Check if we should use cached file
+        use_cache = False
+        if os.path.exists(cache_path) and not force_refresh:
+            if max_age_minutes is None:
+                use_cache = True
+            else:
+                # Check file age
+                file_age_seconds = time_module.time() - os.path.getmtime(cache_path)
+                file_age_minutes = file_age_seconds / 60
+                if file_age_minutes <= max_age_minutes:
+                    use_cache = True
+                else:
+                    logger.info(f"Cache file {filename} is {file_age_minutes:.1f} minutes old (max: {max_age_minutes}), refreshing")
+
+        if use_cache:
             logger.info(f"Loading from cache: {filename}")
             with open(cache_path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -61,6 +78,7 @@ class NYFFScraper:
             content = response.text
 
             # Cache the content
+            os.makedirs(self.cache_dir, exist_ok=True)
             with open(cache_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
@@ -72,11 +90,12 @@ class NYFFScraper:
             logger.error(f"Error fetching {url}: {e}")
             return ""
 
-    def scrape_nyff_lineup(self, url: str = None) -> List[Dict]:
+    def scrape_nyff_lineup(self, url: str = None, force_refresh: bool = False) -> List[Dict]:
         """Scrape NYFF lineup page for films and showtimes.
 
         Args:
             url: URL to scrape (defaults to NYFF 2025 lineup)
+            force_refresh: Force refresh of NYFF cache
 
         Returns:
             List of film dictionaries
@@ -84,7 +103,8 @@ class NYFFScraper:
         if url is None:
             url = "https://www.filmlinc.org/nyff/nyff63-lineup/"
 
-        content = self.get_cached_or_fetch(url, "nyff_lineup.html")
+        # Use 45 minute cache age limit for NYFF lineup
+        content = self.get_cached_or_fetch(url, "nyff_lineup.html", max_age_minutes=45, force_refresh=force_refresh)
 
         if not content:
             return []
@@ -260,10 +280,17 @@ class NYFFScraper:
                 if 'Intro' in button_text:
                     notes.append('Intro')
 
-                # Check availability
-                is_available = not ('line-through' in button.get('class', []) or
-                                  button.get('disabled') == '' or
-                                  'cursor-not-allowed' in button.get('class', []))
+                # Check availability - multiple ways a showtime can be sold out
+                is_disabled = (
+                    button.get('disabled') is not None or
+                    'cursor-not-allowed' in ' '.join(button.get('class', [])) or
+                    'disabled' in ' '.join(button.get('class', []))
+                )
+                
+                # Check for line-through styling on child elements (new structure)
+                has_linethrough = bool(button.select('.line-through'))
+                
+                is_available = not (is_disabled or has_linethrough)
 
                 if time:
                     showtime_data = {

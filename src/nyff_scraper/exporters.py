@@ -6,6 +6,7 @@ Author: Jack Murphy
 
 import json
 import csv
+import os
 import logging
 from datetime import datetime
 from typing import List, Dict
@@ -17,18 +18,30 @@ class JSONExporter:
     """Exporter for JSON format."""
     
     @staticmethod
-    def export(films: List[Dict], filename: str = "nyff_films.json", recommendations: List[Dict] = None) -> None:
-        """Export films data to JSON.
+    def export(films: List[Dict], filename: str = "nyff_films.json", recommendations: List[Dict] = None, incremental: bool = True) -> None:
+        """Export films data to JSON with optional incremental updates.
         
         Args:
             films: List of film dictionaries
             filename: Output filename
             recommendations: Optional Letterboxd recommendations
+            incremental: Whether to attempt incremental updates
         """
+        # Try incremental update if requested and file exists
+        if incremental and os.path.exists(filename):
+            try:
+                updated_films = JSONExporter._merge_films_incrementally(films, filename)
+                if updated_films:
+                    films = updated_films
+                    logger.info(f"Performed incremental update on {filename}")
+            except Exception as e:
+                logger.warning(f"Incremental update failed, doing full export: {e}")
+        
         output_data = {
             "films": films,
             "total_films": len(films),
-            "generated_at": datetime.now().isoformat()
+            "generated_at": datetime.now().isoformat(),
+            "nyff_scraper_version": "1.0"  # Version marker to identify our files
         }
         
         if recommendations:
@@ -53,6 +66,79 @@ class JSONExporter:
         
         rec_msg = f" with {len(recommendations)} recommendations" if recommendations else ""
         logger.info(f"Exported {len(films)} films{rec_msg} to {filename}")
+    
+    @staticmethod
+    def _merge_films_incrementally(new_films: List[Dict], existing_file: str) -> List[Dict]:
+        """Merge new films with existing JSON file incrementally.
+        
+        Args:
+            new_films: New film data from scraping
+            existing_file: Path to existing JSON file
+            
+        Returns:
+            Merged film list or None if merge failed
+        """
+        import os
+        
+        # Load existing data
+        with open(existing_file, 'r', encoding='utf-8') as f:
+            existing_data = json.load(f)
+        
+        # Check if this is a file from our scraper
+        if not existing_data.get("nyff_scraper_version"):
+            logger.warning("Existing file doesn't appear to be from nyff_scraper, skipping incremental update")
+            return None
+        
+        existing_films = existing_data.get("films", [])
+        if not existing_films:
+            return new_films
+        
+        # Create lookup for existing films by title
+        existing_by_title = {film["title"]: film for film in existing_films}
+        
+        merged_films = []
+        changes_made = 0
+        
+        for new_film in new_films:
+            title = new_film["title"]
+            
+            if title in existing_by_title:
+                existing_film = existing_by_title[title]
+                
+                # Smart merge: preserve expensive data (trailers, IMDb) but update showtimes and metadata
+                merged_film = existing_film.copy()
+                
+                # Always update these fields (they change frequently)
+                always_update = [
+                    "nyff_showtimes", "description", "notes", 
+                    "has_intro_or_qna", "is_likely_to_be_distributed",
+                    "likely_theatrical"
+                ]
+                
+                for field in always_update:
+                    if field in new_film and new_film[field] != existing_film.get(field):
+                        merged_film[field] = new_film[field]
+                        changes_made += 1
+                
+                # Keep expensive fields from existing if they exist
+                expensive_fields = [
+                    "trailer_url", "youtube_search_url", "imdb_id", 
+                    "production_companies", "distributors", "theatrical_release_date",
+                    "runtime", "country"
+                ]
+                
+                for field in expensive_fields:
+                    if field not in merged_film and field in new_film:
+                        merged_film[field] = new_film[field]
+                
+                merged_films.append(merged_film)
+            else:
+                # New film, add it completely
+                merged_films.append(new_film)
+                changes_made += 1
+        
+        logger.info(f"Incremental update: {changes_made} changes detected")
+        return merged_films
 
 
 class CSVExporter:

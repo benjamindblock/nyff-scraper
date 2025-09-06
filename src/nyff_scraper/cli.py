@@ -76,6 +76,11 @@ Examples:
         metavar='USERNAME',
         help='Generate recommendations based on Letterboxd user profile'
     )
+    processing_group.add_argument(
+        '--force-refresh-nyff',
+        action='store_true',
+        help='Force refresh of NYFF lineup cache (ignore existing cache)'
+    )
 
     # Output options
     output_group = parser.add_argument_group('output options')
@@ -162,7 +167,7 @@ def run_scraper_pipeline(args) -> int:
 
         # Step 1: Scrape film data
         print("Scraping NYFF film lineup...")
-        films = scraper.scrape_nyff_lineup(args.url)
+        films = scraper.scrape_nyff_lineup(args.url, force_refresh=args.force_refresh_nyff)
 
         if not films:
             logger.error("No films found at the provided URL")
@@ -228,18 +233,34 @@ def run_scraper_pipeline(args) -> int:
 
         base_path = os.path.join(args.output_dir, args.output_name)
 
+        # Export main files without recommendations
         if args.json_only:
             from .exporters import JSONExporter
-            JSONExporter.export(films, f"{base_path}.json", recommendations=recommendations)
+            JSONExporter.export(films, f"{base_path}.json")
         elif args.csv_only:
             from .exporters import CSVExporter
-            CSVExporter.export(films, f"{base_path}.csv", recommendations=recommendations)
+            CSVExporter.export(films, f"{base_path}.csv")
         elif args.markdown_only:
             from .exporters import MarkdownExporter
-            MarkdownExporter.export(films, f"{base_path}.md", recommendations=recommendations)
+            MarkdownExporter.export(films, f"{base_path}.md")
         else:
             # Export all formats
-            export_all_formats(films, base_path, recommendations=recommendations)
+            export_all_formats(films, base_path)
+
+        # Export separate Letterboxd recommendations if requested
+        if args.letterboxd and recommendations:
+            print("Exporting Letterboxd recommendations...")
+            letterboxd_base = os.path.join(args.output_dir, f"{args.output_name}_letterboxd_recommendations")
+            
+            from .exporters import JSONExporter, CSVExporter, MarkdownExporter
+            JSONExporter.export(films, f"{letterboxd_base}.json", recommendations=recommendations)
+            CSVExporter.export(films, f"{letterboxd_base}.csv", recommendations=recommendations) 
+            MarkdownExporter.export(films, f"{letterboxd_base}.md", recommendations=recommendations)
+            
+            print(f"Letterboxd recommendations exported to:")
+            print(f"  - {letterboxd_base}.json")
+            print(f"  - {letterboxd_base}.csv") 
+            print(f"  - {letterboxd_base}.md")
 
         # Final summary
         print(f"\nScraping completed successfully!")
