@@ -1,16 +1,12 @@
 # NYFF Scraper
 
-A Python tool for scraping the New York Film Festival (NYFF) website and enriching the data with IMDb information and YouTube trailers.
+A Python tool for scraping the New York Film Festival (NYFF) website, useful for planning what you want to see at the festival.
 
 **Author:** Jack Murphy
 
 ## Features
 
-- **Film Data Scraping**: Extract comprehensive film information from NYFF lineup pages
-- **IMDb Integration**: Automatically find and retrieve production company and distributor data
-- **Trailer Discovery**: Search for and link YouTube trailers
-- **Multiple Export Formats**: Generate JSON, CSV, and Markdown outputs
-- **Fast & Cacheable**: Built-in caching system for efficient re-runs
+The script grabs everything showing at NYFF, looks up IMDb data for production company information, runtimes, possible release date if available, and compiles it. It also looks up trailers, etc.
 
 ## Quick Start
 
@@ -46,12 +42,7 @@ nyff-scraper --csv-only
 ### JSON
 The JSON output is provided as a structured format that can be used however you like. You can load it into a spreadsheet, another script, or even an LLM if you want to ask more complex questions. For example, you could ask it to find three films that are unlikely to be in theatres next year and don’t have overlapping showtimes, or filter by whether you want to attend introductions or avoid them.
 
-**Metadata Fields:**
-- `category`: "shorts", "restoration", "spotlight", "feature", or "other"
-- `is_short_program`: Boolean indicating shorts collections
-- `is_restoration`: Boolean for revivals and restorations
-- `is_likely_to_be_distributed`: Boolean based on production/distributor analysis
-- `has_intro_or_qna`: Boolean for films with introductions or Q&A sessions
+You can look through the JSON file or the CSV to see what kinds of fields there are.
 
 ### CSV
 Flattened data suitable for spreadsheet analysis with one row per showtime - that I know can be a bit much all at once, however it allows you to filter in a more robust way.
@@ -103,7 +94,7 @@ nyff-scraper --only-scrape
 # Skip specific enrichment steps
 nyff-scraper --skip-imdb --skip-trailers
 
-# Check your letterboxd account for things it could recommend
+# Check your letterboxd account for things it could recommend (experimental)
 nyff-scraper --letterboxd yourusername
 
 # Custom output location
