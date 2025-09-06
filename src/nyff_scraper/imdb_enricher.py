@@ -391,12 +391,27 @@ class IMDbEnricher:
                 film['imdb_id'] = None
                 film['theatrical_release_date'] = None
             
-            # Keep legacy field for backwards compatibility
-            # The new logic will be handled by MetadataEnricher
+            # Determine likely_theatrical status based on multiple criteria
             production_count = len(film.get('production_companies', []))
             distributor_count = len(film.get('distributors', []))
+            has_release_date = bool(film.get('theatrical_release_date'))
             
-            film['likely_theatrical'] = (production_count > 2 or distributor_count >= 1)
+            # A film is likely theatrical if:
+            # 1. It has a confirmed theatrical release date, OR
+            # 2. It has significant production backing (multiple companies) or distributors
+            film['likely_theatrical'] = (
+                has_release_date or 
+                production_count > 2 or 
+                distributor_count >= 1
+            )
+            
+            # Log the reasoning for debugging
+            if has_release_date:
+                logger.info(f"'{film['title']}' marked as likely_theatrical=True due to confirmed release date: {film['theatrical_release_date']}")
+            elif production_count > 2 or distributor_count >= 1:
+                logger.info(f"'{film['title']}' marked as likely_theatrical=True due to {production_count} production companies and {distributor_count} distributors")
+            else:
+                logger.info(f"'{film['title']}' marked as likely_theatrical=False - no release date and limited production backing")
             
             processed_films.append(film)
         

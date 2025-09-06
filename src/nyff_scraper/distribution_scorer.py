@@ -202,7 +202,8 @@ class DistributionLikelihoodScorer:
             film: Film dictionary with all available metadata
 
         Returns:
-            Tuple of (score, is_likely_distributed, theatrical_release_date)
+            Tuple of (score, is_distributed_or_likely, theatrical_release_date)
+            Note: is_distributed_or_likely is True if confirmed release date OR score >= 50
         """
         total_score = 0
 
@@ -229,12 +230,23 @@ class DistributionLikelihoodScorer:
         # Cap score at 0-100
         final_score = max(0, min(100, total_score))
 
-        # Boolean flag for likely distribution
-        is_likely_distributed = final_score >= 50
+        # Boolean flag for distribution status
+        # If there's a confirmed theatrical release date, it IS being distributed (definite, not likely)
+        # Otherwise, base it on the likelihood score
+        has_release_date = bool(film.get('theatrical_release_date'))
+        is_likely_distributed = has_release_date or final_score >= 50
 
+        # Enhanced logging with correct terminology
+        if has_release_date:
+            reason = "confirmed theatrical release"
+            status_word = "Confirmed"
+        else:
+            reason = f"likelihood score {final_score}"
+            status_word = "Likely" if final_score >= 50 else "Unlikely"
+        
         logger.info(f"Film '{film.get('title', 'Unknown')}': "
                    f"Section={festival_section}, Score={final_score}, "
-                   f"Likely={is_likely_distributed}")
+                   f"Distribution={status_word} ({reason})")
 
         return final_score, is_likely_distributed, theatrical_release_date
 
