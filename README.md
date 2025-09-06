@@ -65,7 +65,7 @@ Human-readable format perfect for documentation and sharing.
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+gh repo clone rdcdc/nyff-scraper
 cd nyff-scraper
 
 # Install in development mode
@@ -79,7 +79,7 @@ pip install nyff-scraper
 
 ```bash
 # Clone and install dependencies
-git clone <repository-url>
+gh repo clone rdcdc/nyff-scraper
 cd nyff-scraper
 pip install -r requirements.txt
 
