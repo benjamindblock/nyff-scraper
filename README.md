@@ -122,7 +122,7 @@ export_all_formats(films, "my_films")
 ## Output Formats
 
 ### JSON
-Complete structured data with all film information, showtimes, and metadata.
+Complete structured data with all film information, showtimes, and metadata. This is the most appropriate format for uploading to an LLM and asking it questions about what you might want to see at NYFF this year.
 
 ### CSV
 Flattened data suitable for spreadsheet analysis with one row per showtime.
