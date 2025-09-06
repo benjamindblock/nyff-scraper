@@ -41,57 +41,179 @@ class IMDbEnricher:
         Returns:
             IMDb ID (e.g., "tt1234567") or None if not found
         """
-        # Clean title for search
-        clean_title = re.sub(r'[^\w\s]', '', film_title)
+        def normalize_title(title: str) -> str:
+            """Normalize title for search by handling special characters."""
+            # Replace smart quotes and similar characters
+            title = title.replace(''', "'").replace(''', "'")
+            title = title.replace('"', '"').replace('"', '"')
+            title = title.replace('—', '-').replace('–', '-')
+            # Keep apostrophes, hyphens, and common punctuation for better matching
+            # Only remove truly problematic characters
+            title = re.sub(r'[^\w\s\'\-\.\:\!\?]', ' ', title)
+            # Collapse multiple spaces
+            title = re.sub(r'\s+', ' ', title).strip()
+            return title
         
-        # Build search query - include director for better accuracy
-        query_parts = [clean_title]
-        if director:
-            clean_director = re.sub(r'[^\w\s]', '', director)
-            query_parts.append(clean_director)
-        query_parts.append(year)
+        # Normalize title for search
+        clean_title = normalize_title(film_title)
         
-        search_query = quote(" ".join(query_parts))
+        # Strategy 1: Use advanced search with title and year filter (most reliable)
+        advanced_search_url = f"https://www.imdb.com/search/title/?title={quote(clean_title)}&release_date={year}-01-01,{year}-12-31"
         
-        search_url = f"https://www.imdb.com/find/?q={search_query}&s=tt&ttype=ft"
+        filename = f"imdb_advanced_search_{re.sub(r'[^\w]', '_', film_title)}.html"
+        content = self.get_cached_or_fetch(advanced_search_url, filename)
         
-        filename = f"imdb_search_{re.sub(r'[^\w]', '_', film_title)}.html"
-        content = self.get_cached_or_fetch(search_url, filename)
-        
-        if not content:
-            return None
+        if content:
+            soup = BeautifulSoup(content, 'html.parser')
             
-        soup = BeautifulSoup(content, 'html.parser')
+            # Advanced search result selectors
+            advanced_selectors = [
+                '.titleColumn h3 a',
+                '.cli-title a',
+                '.ipc-title a',
+                'h3.ipc-title a',
+                '.lister-item-header a'
+            ]
+            
+            for selector in advanced_selectors:
+                links = soup.select(selector)
+                for link in links:
+                    href = link.get('href', '')
+                    match = re.search(r'/title/(tt\d+)/', href)
+                    if match:
+                        imdb_id = match.group(1)
+                        link_text = link.get_text(strip=True)
+                        
+                        # Validate result by checking if title is reasonably similar
+                        if self._is_title_match(link_text, film_title) and self._validate_advanced_result(link, film_title, year, director):
+                            logger.info(f"Found IMDb ID for '{film_title}' via advanced search: {imdb_id}")
+                            return imdb_id
         
-        # Look for search results with improved selectors
-        result_selectors = [
-            '.findResult .result_text a',
-            '.titleResult a', 
-            '.find-title-result a',
-            '.find-section .findResult h3.findResult-text a',
-            'a[href*="/title/tt"]',
-            '.ipc-metadata-list-summary-item__t',
-            '.cli-title'
-        ]
+        # Strategy 2: Fall back to original find search if advanced search fails
+        search_attempts = []
         
-        for selector in result_selectors:
-            links = soup.select(selector)
-            for link in links:
-                href = link.get('href', '')
-                # Extract IMDb ID from URL
-                match = re.search(r'/title/(tt\d+)/', href)
-                if match:
-                    imdb_id = match.group(1)
-                    logger.info(f"Found IMDb ID for '{film_title}' (with director: {director}): {imdb_id}")
-                    return imdb_id
-        
-        # If we didn't find anything with director, try without director
         if director:
-            logger.warning(f"No IMDb ID found for '{film_title}' with director '{director}', trying without director")
-            return self.search_imdb(film_title, year, "")
+            clean_director = normalize_title(director)
+            search_attempts.append(f"{clean_title} {clean_director} {year}")
         
-        logger.warning(f"No IMDb ID found for '{film_title}'")
+        search_attempts.append(f"{clean_title} {year}")
+        search_attempts.append(clean_title)
+        
+        for attempt_num, search_query in enumerate(search_attempts, 1):
+            search_url = f"https://www.imdb.com/find/?q={quote(search_query)}&s=tt&ttype=ft"
+            
+            filename = f"imdb_search_{re.sub(r'[^\w]', '_', film_title)}_attempt_{attempt_num}.html"
+            content = self.get_cached_or_fetch(search_url, filename)
+            
+            if not content:
+                continue
+                
+            soup = BeautifulSoup(content, 'html.parser')
+            
+            # Look for search results with improved selectors
+            result_selectors = [
+                '.findResult .result_text a',
+                '.titleResult a', 
+                '.find-title-result a',
+                '.find-section .findResult h3.findResult-text a',
+                'a[href*="/title/tt"]',
+                '.ipc-metadata-list-summary-item__t',
+                '.cli-title'
+            ]
+            
+            for selector in result_selectors:
+                links = soup.select(selector)
+                for link in links:
+                    href = link.get('href', '')
+                    match = re.search(r'/title/(tt\d+)/', href)
+                    if match:
+                        imdb_id = match.group(1)
+                        
+                        if self._validate_search_result(link, film_title, year, director):
+                            logger.info(f"Found IMDb ID for '{film_title}' (find search attempt {attempt_num}): {imdb_id}")
+                            return imdb_id
+                        
+                        logger.info(f"Found IMDb ID for '{film_title}' (find search attempt {attempt_num}, validation unclear): {imdb_id}")
+                        return imdb_id
+            
+            if attempt_num == 1 and director:
+                logger.warning(f"No IMDb ID found for '{film_title}' with director '{director}', trying without director")
+            elif attempt_num == 2:
+                logger.warning(f"No IMDb ID found for '{film_title}' with year, trying title only")
+        
+        logger.warning(f"No IMDb ID found for '{film_title}' after all search attempts")
         return None
+    
+    def _is_title_match(self, found_title: str, expected_title: str, threshold: float = 0.7) -> bool:
+        """Check if found title is similar enough to expected title."""
+        try:
+            from difflib import SequenceMatcher
+            
+            # Normalize both titles for comparison
+            found_clean = re.sub(r'[^\w\s]', ' ', found_title.lower().strip())
+            expected_clean = re.sub(r'[^\w\s]', ' ', expected_title.lower().strip())
+            
+            # Calculate similarity ratio
+            similarity = SequenceMatcher(None, found_clean, expected_clean).ratio()
+            
+            # Also check if expected title is contained in found title (handles subtitles)
+            contains_match = expected_clean in found_clean or found_clean in expected_clean
+            
+            return similarity >= threshold or contains_match
+        except ImportError:
+            # Fallback to simple string matching if difflib not available
+            found_clean = re.sub(r'[^\w\s]', ' ', found_title.lower().strip())
+            expected_clean = re.sub(r'[^\w\s]', ' ', expected_title.lower().strip())
+            return expected_clean in found_clean or found_clean in expected_clean
+    
+    def _validate_advanced_result(self, link_element, expected_title: str, expected_year: str, expected_director: str = "") -> bool:
+        """Validate advanced search results."""
+        try:
+            # Get the parent container which usually has year and director info
+            parent = link_element.find_parent()
+            while parent and parent.name not in ['li', 'div', 'article'] and parent.find_parent():
+                parent = parent.find_parent()
+            
+            if not parent:
+                return True  # If we can't find parent context, assume it's okay
+            
+            parent_text = parent.get_text()
+            
+            # Check for year in the parent text
+            year_pattern = r'\b' + re.escape(expected_year) + r'\b'
+            year_found = re.search(year_pattern, parent_text)
+            
+            # If director is provided, check for director match
+            director_found = True
+            if expected_director:
+                director_words = expected_director.lower().split()
+                # Check if any significant part of director name appears
+                director_found = any(word in parent_text.lower() for word in director_words if len(word) > 2)
+            
+            return bool(year_found) and director_found
+        except Exception:
+            return True  # If validation fails, assume it's okay
+
+    def _validate_search_result(self, link_element, expected_title: str, expected_year: str, expected_director: str = "") -> bool:
+        """Validate if a search result matches our expectations."""
+        try:
+            # Get the result text and surrounding context
+            result_text = link_element.get_text(strip=True)
+            parent_text = link_element.find_parent().get_text(strip=True) if link_element.find_parent() else ""
+            
+            # Check if year matches
+            year_found = re.search(r'\b' + expected_year + r'\b', parent_text)
+            
+            # Check if director matches (if provided)
+            director_found = True
+            if expected_director:
+                # Normalize director name for comparison
+                normalized_director = re.sub(r'[^\w\s]', ' ', expected_director.lower())
+                director_found = normalized_director in parent_text.lower()
+            
+            return year_found and director_found
+        except Exception:
+            return True  # If validation fails, assume it's okay
     
     def get_theatrical_release_date(self, imdb_id: str) -> Optional[str]:
         """Get theatrical release date from IMDb main page.
