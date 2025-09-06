@@ -1,5 +1,5 @@
 """
-NYFF Scraper - Extract film lineup data and enrich with IMDb and trailer information.
+NYFF Scraper - Extract film lineup data and enrich with IMDb, trailer, and metadata classification information.
 
 Author: Jack Murphy
 """
@@ -11,12 +11,14 @@ __description__ = "Scrape NYFF film data and enrich with IMDb and YouTube traile
 from .scraper import NYFFScraper
 from .imdb_enricher import IMDbEnricher
 from .trailer_enricher import TrailerEnricher
+from .metadata_enricher import MetadataEnricher
 from .exporters import JSONExporter, CSVExporter, MarkdownExporter
 
 __all__ = [
     "NYFFScraper",
     "IMDbEnricher", 
     "TrailerEnricher",
+    "MetadataEnricher",
     "JSONExporter",
     "CSVExporter", 
     "MarkdownExporter"

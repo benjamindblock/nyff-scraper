@@ -12,6 +12,7 @@ from typing import Optional
 from .scraper import NYFFScraper
 from .imdb_enricher import IMDbEnricher
 from .trailer_enricher import TrailerEnricher
+from .metadata_enricher import MetadataEnricher
 from .exporters import export_all_formats
 
 # Configure logging
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 def setup_argument_parser() -> argparse.ArgumentParser:
     """Set up command-line argument parser."""
     parser = argparse.ArgumentParser(
-        description="Scrape NYFF film data and enrich with IMDb and trailer information",
+        description="Scrape NYFF film data and enrich with IMDb, trailer, and metadata classification information",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -181,7 +182,13 @@ def run_scraper_pipeline(args) -> int:
             with_trailers = len([f for f in films if f.get('trailer_url')])
             print(f"Found trailers for {with_trailers}/{len(films)} films")
 
-        # Step 4: Export data
+        # Step 4: Add metadata classification fields
+        if not args.only_scrape:
+            print("Adding metadata classification fields...")
+            metadata_enricher = MetadataEnricher()
+            films = metadata_enricher.enrich_films(films)
+
+        # Step 5: Export data
         print("Exporting data...")
 
         import os
@@ -210,13 +217,31 @@ def run_scraper_pipeline(args) -> int:
         if not args.only_scrape:
             if not args.skip_imdb:
                 with_imdb = len([f for f in films if f.get('imdb_id')])
-                likely_theatrical = len([f for f in films if f.get('likely_theatrical')])
                 print(f"IMDb matches: {with_imdb}")
-                print(f"Likely theatrical releases: {likely_theatrical}")
 
             if not args.skip_trailers:
                 with_trailers = len([f for f in films if f.get('trailer_url')])
                 print(f"Trailers found: {with_trailers}")
+            
+            # Metadata summary
+            short_programs = len([f for f in films if f.get('is_short_program')])
+            restorations = len([f for f in films if f.get('is_restoration')])
+            with_intro_qna = len([f for f in films if f.get('has_intro_or_qna')])
+            likely_distributed = len([f for f in films if f.get('is_likely_to_be_distributed')])
+            
+            print(f"Classification summary:")
+            print(f"  Short programs: {short_programs}")
+            print(f"  Restorations: {restorations}")
+            print(f"  With intro/Q&A: {with_intro_qna}")
+            print(f"  Likely distributed: {likely_distributed}")
+            
+            # Category breakdown
+            categories = {}
+            for film in films:
+                cat = film.get('category', 'feature')
+                categories[cat] = categories.get(cat, 0) + 1
+            
+            print(f"Category breakdown: {dict(sorted(categories.items()))}")
 
         return 0
 

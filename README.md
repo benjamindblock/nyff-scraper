@@ -44,10 +44,17 @@ nyff-scraper --csv-only
 ## Output Formats
 
 ### JSON
-Complete structured data with all film information, showtimes, and metadata. This is the most appropriate format for uploading to an LLM and asking it questions about what you might want to see at NYFF this year.
+The JSON output is provided as a structured format that can be used however you like. You can load it into a spreadsheet, another script, or even an LLM if you want to ask more complex questions. For example, you could ask it to find three films that are unlikely to be in theatres next year and don’t have overlapping showtimes, or filter by whether you want to attend introductions or avoid them.
+
+**Metadata Fields:**
+- `category`: "shorts", "restoration", "spotlight", "feature", or "other"
+- `is_short_program`: Boolean indicating shorts collections
+- `is_restoration`: Boolean for revivals and restorations
+- `is_likely_to_be_distributed`: Boolean based on production/distributor analysis
+- `has_intro_or_qna`: Boolean for films with introductions or Q&A sessions
 
 ### CSV
-Flattened data suitable for spreadsheet analysis with one row per showtime.
+Flattened data suitable for spreadsheet analysis with one row per showtime - that I know can be a bit much all at once, however it allows you to filter in a more robust way.
 
 ### Markdown
 Human-readable format perfect for documentation and sharing.

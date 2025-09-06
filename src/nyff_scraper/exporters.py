@@ -57,6 +57,14 @@ class CSVExporter:
             trailer_url = film.get('trailer_url', '')
             youtube_search_url = film.get('youtube_search_url', '')
             
+            # New metadata fields
+            is_short_program = 'TRUE' if film.get('is_short_program', False) else 'FALSE'
+            is_restoration = 'TRUE' if film.get('is_restoration', False) else 'FALSE'
+            is_likely_to_be_distributed = 'TRUE' if film.get('is_likely_to_be_distributed', False) else 'FALSE'
+            has_intro_or_qna = 'TRUE' if film.get('has_intro_or_qna', False) else 'FALSE'
+            category = film.get('category', 'feature')
+            notes = film.get('notes', '')
+            
             # Handle showtimes - create one row per showtime
             showtimes = film.get('nyff_showtimes', [])
             
@@ -79,7 +87,13 @@ class CSVExporter:
                         'IMDB_ID': imdb_id,
                         'Likely_Theatrical': likely_theatrical,
                         'Trailer_URL': trailer_url,
-                        'YouTube_Search_URL': youtube_search_url
+                        'YouTube_Search_URL': youtube_search_url,
+                        'Is_Short_Program': is_short_program,
+                        'Is_Restoration': is_restoration,
+                        'Is_Likely_To_Be_Distributed': is_likely_to_be_distributed,
+                        'Has_Intro_Or_QnA': has_intro_or_qna,
+                        'Category': category,
+                        'Notes': notes
                     }
                     csv_rows.append(row)
             else:
@@ -101,7 +115,13 @@ class CSVExporter:
                     'IMDB_ID': imdb_id,
                     'Likely_Theatrical': likely_theatrical,
                     'Trailer_URL': trailer_url,
-                    'YouTube_Search_URL': youtube_search_url
+                    'YouTube_Search_URL': youtube_search_url,
+                    'Is_Short_Program': is_short_program,
+                    'Is_Restoration': is_restoration,
+                    'Is_Likely_To_Be_Distributed': is_likely_to_be_distributed,
+                    'Has_Intro_Or_QnA': has_intro_or_qna,
+                    'Category': category,
+                    'Notes': notes
                 }
                 csv_rows.append(row)
         
@@ -110,7 +130,9 @@ class CSVExporter:
             'Title', 'Director', 'Year', 'Country', 'Runtime', 'Description',
             'Date', 'Time', 'Venue', 'Showtime_Notes', 'Available',
             'Production_Companies', 'Distributors', 'IMDB_ID', 
-            'Likely_Theatrical', 'Trailer_URL', 'YouTube_Search_URL'
+            'Likely_Theatrical', 'Trailer_URL', 'YouTube_Search_URL',
+            'Is_Short_Program', 'Is_Restoration', 'Is_Likely_To_Be_Distributed',
+            'Has_Intro_Or_QnA', 'Category', 'Notes'
         ]
         
         with open(filename, 'w', newline='', encoding='utf-8') as f:
@@ -200,9 +222,29 @@ class MarkdownExporter:
                 else:
                     f.write("**Distributors:** Not yet acquired\n\n")
                 
+                # Classification metadata
+                category = film.get('category', 'feature')
+                f.write(f"**Category:** {category.title()}\n\n")
+                
+                # Boolean flags
+                flags = []
+                if film.get('is_short_program', False):
+                    flags.append("Shorts Program")
+                if film.get('is_restoration', False):
+                    flags.append("Restoration/Revival")
+                if film.get('has_intro_or_qna', False):
+                    flags.append("Includes Intro/Q&A")
+                
+                if flags:
+                    f.write(f"**Special Notes:** {', '.join(flags)}\n\n")
+                
                 # Theatrical likelihood
-                likely_theatrical = film.get('likely_theatrical', False)
-                f.write(f"**Likely Theatrical Release:** {'Yes' if likely_theatrical else 'No'}\n\n")
+                likely_distributed = film.get('is_likely_to_be_distributed', False)
+                f.write(f"**Likely Distribution:** {'Yes' if likely_distributed else 'Limited'}\n\n")
+                
+                # Custom notes
+                if film.get('notes'):
+                    f.write(f"**Notes:** {film['notes']}\n\n")
                 
                 # Links
                 links = []

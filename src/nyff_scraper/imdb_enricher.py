@@ -181,9 +181,8 @@ class IMDbEnricher:
                 film['distributors'] = []
                 film['imdb_id'] = None
             
-            # Determine likelihood of theatrical distribution
-            # Logic: If there are more than 2-3 producers and/or at least one distributor, 
-            # then likely to be in theatres
+            # Keep legacy field for backwards compatibility
+            # The new logic will be handled by MetadataEnricher
             production_count = len(film.get('production_companies', []))
             distributor_count = len(film.get('distributors', []))
             
