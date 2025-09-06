@@ -6,12 +6,12 @@ A Python tool for scraping the New York Film Festival (NYFF) website and enrichi
 
 ## Features
 
-- 🎬 **Film Data Scraping**: Extract comprehensive film information from NYFF lineup pages
-- 🔍 **IMDb Integration**: Automatically find and retrieve production company and distributor data
-- 🎥 **Trailer Discovery**: Search for and link YouTube trailers
-- 📊 **Multiple Export Formats**: Generate JSON, CSV, and Markdown outputs
-- 🚀 **Fast & Cacheable**: Built-in caching system for efficient re-runs
-- 🛠️ **Extensible Design**: Easy to adapt for other film festivals
+- **Film Data Scraping**: Extract comprehensive film information from NYFF lineup pages
+- **IMDb Integration**: Automatically find and retrieve production company and distributor data
+- **Trailer Discovery**: Search for and link YouTube trailers
+- **Multiple Export Formats**: Generate JSON, CSV, and Markdown outputs
+- **Fast & Cacheable**: Built-in caching system for efficient re-runs
+- **Extensible Design**: Easy to adapt for other film festivals
 
 ## Quick Start
 
@@ -124,7 +124,7 @@ export_all_formats(films, "my_films")
 ### JSON
 Complete structured data with all film information, showtimes, and metadata.
 
-### CSV 
+### CSV
 Flattened data suitable for spreadsheet analysis with one row per showtime.
 
 ### Markdown
