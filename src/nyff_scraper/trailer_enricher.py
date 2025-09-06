@@ -23,19 +23,34 @@ class TrailerEnricher:
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
     
-    def search_youtube_trailer(self, title: str, year: str) -> Optional[str]:
+    def search_youtube_trailer(self, title: str, year: str, director: str = "", is_restoration: bool = False) -> Optional[str]:
         """Search for a film trailer on YouTube using direct HTTP requests.
         
         Args:
             title: Film title to search for
             year: Year of the film
+            director: Director name to include in search for better accuracy
+            is_restoration: Whether this is a restoration (uses original film year)
             
         Returns:
             YouTube URL of the first found trailer, or empty string if none found
         """
         try:
-            # Create search query
-            query = f"{title} {year} trailer"
+            # Create search query with director for better accuracy
+            query_parts = [title]
+            
+            # Add director if provided
+            if director:
+                query_parts.append(director)
+            
+            # Add year
+            if year:
+                query_parts.append(year)
+                
+            # Add trailer keyword
+            query_parts.append("trailer")
+            
+            query = " ".join(query_parts)
             logger.info(f"Searching YouTube for: {query}")
             
             # Use YouTube search URL
@@ -63,17 +78,24 @@ class TrailerEnricher:
             logger.error(f"Error searching YouTube for '{title}': {e}")
             return ""
     
-    def construct_youtube_search_url(self, title: str, year: str) -> str:
+    def construct_youtube_search_url(self, title: str, year: str, director: str = "") -> str:
         """Construct a YouTube search URL for manual searching.
         
         Args:
             title: Film title
             year: Year of the film
+            director: Director name to include in search
             
         Returns:
             YouTube search URL
         """
-        query = f"{title} {year} trailer".replace(" ", "+")
+        query_parts = [title]
+        if director:
+            query_parts.append(director)
+        if year:
+            query_parts.append(year)
+        query_parts.append("trailer")
+        query = " ".join(query_parts).replace(" ", "+")
         return f"https://www.youtube.com/results?search_query={query}"
     
     def enrich_films(self, films: List[Dict], search_trailers: bool = True, 
@@ -99,22 +121,31 @@ class TrailerEnricher:
             
             title = film.get('title', '')
             year = film.get('year', '')
+            director = film.get('director', '')
+            is_short_program = film.get('is_short_program', False)
+            is_restoration = film.get('is_restoration', False)
             
-            if search_trailers and title and year:
+            # Skip trailer search for shorts programs
+            if is_short_program:
+                logger.info(f"Skipping trailer search for shorts program: {title}")
+                film['trailer_url'] = ""
+                film['youtube_search_url'] = ""
+            elif search_trailers and title and year:
                 # Active search for trailer
-                trailer_url = self.search_youtube_trailer(title, year)
+                trailer_url = self.search_youtube_trailer(title, year, director, is_restoration)
                 film['trailer_url'] = trailer_url
                 # Be nice to YouTube - delay between searches
                 time.sleep(2)
+                
+                # Always provide search URL
+                film['youtube_search_url'] = self.construct_youtube_search_url(title, year, director)
             else:
                 # Just provide search URL for manual lookup
                 film['trailer_url'] = ""
-                
-            # Always provide search URL
-            if title and year:
-                film['youtube_search_url'] = self.construct_youtube_search_url(title, year)
-            else:
-                film['youtube_search_url'] = ""
+                if title and year:
+                    film['youtube_search_url'] = self.construct_youtube_search_url(title, year, director)
+                else:
+                    film['youtube_search_url'] = ""
             
             enriched_films.append(film)
         

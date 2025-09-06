@@ -30,19 +30,28 @@ class IMDbEnricher:
         })
         self.cache_dir = cache_dir
         
-    def search_imdb(self, film_title: str, year: str = "2025") -> Optional[str]:
+    def search_imdb(self, film_title: str, year: str = "2025", director: str = "") -> Optional[str]:
         """Search IMDb for film and return IMDb ID.
         
         Args:
             film_title: Title of the film to search for
             year: Year to include in search (defaults to 2025)
+            director: Director name to include for more accurate search
             
         Returns:
             IMDb ID (e.g., "tt1234567") or None if not found
         """
         # Clean title for search
         clean_title = re.sub(r'[^\w\s]', '', film_title)
-        search_query = quote(f"{clean_title} {year}")
+        
+        # Build search query - include director for better accuracy
+        query_parts = [clean_title]
+        if director:
+            clean_director = re.sub(r'[^\w\s]', '', director)
+            query_parts.append(clean_director)
+        query_parts.append(year)
+        
+        search_query = quote(" ".join(query_parts))
         
         search_url = f"https://www.imdb.com/find/?q={search_query}&s=tt&ttype=ft"
         
@@ -54,12 +63,15 @@ class IMDbEnricher:
             
         soup = BeautifulSoup(content, 'html.parser')
         
-        # Look for search results
+        # Look for search results with improved selectors
         result_selectors = [
             '.findResult .result_text a',
-            '.titleResult a',
+            '.titleResult a', 
             '.find-title-result a',
-            'a[href*="/title/tt"]'
+            '.find-section .findResult h3.findResult-text a',
+            'a[href*="/title/tt"]',
+            '.ipc-metadata-list-summary-item__t',
+            '.cli-title'
         ]
         
         for selector in result_selectors:
@@ -70,8 +82,13 @@ class IMDbEnricher:
                 match = re.search(r'/title/(tt\d+)/', href)
                 if match:
                     imdb_id = match.group(1)
-                    logger.info(f"Found IMDb ID for '{film_title}': {imdb_id}")
+                    logger.info(f"Found IMDb ID for '{film_title}' (with director: {director}): {imdb_id}")
                     return imdb_id
+        
+        # If we didn't find anything with director, try without director
+        if director:
+            logger.warning(f"No IMDb ID found for '{film_title}' with director '{director}', trying without director")
+            return self.search_imdb(film_title, year, "")
         
         logger.warning(f"No IMDb ID found for '{film_title}'")
         return None
@@ -233,8 +250,9 @@ class IMDbEnricher:
         for i, film in enumerate(films):
             logger.info(f"Processing film {i+1}/{len(films)}: {film['title']}")
             
-            # Search IMDb
-            imdb_id = self.search_imdb(film['title'], film.get('year', '2025'))
+            # Search IMDb with director for better accuracy
+            director = film.get('director', '')
+            imdb_id = self.search_imdb(film['title'], film.get('year', '2025'), director)
             
             if imdb_id:
                 # Get company credits
