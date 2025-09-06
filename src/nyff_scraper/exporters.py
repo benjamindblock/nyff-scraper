@@ -17,28 +17,55 @@ class JSONExporter:
     """Exporter for JSON format."""
     
     @staticmethod
-    def export(films: List[Dict], filename: str = "nyff_films.json") -> None:
+    def export(films: List[Dict], filename: str = "nyff_films.json", recommendations: List[Dict] = None) -> None:
         """Export films data to JSON.
         
         Args:
             films: List of film dictionaries
             filename: Output filename
+            recommendations: Optional Letterboxd recommendations
         """
+        output_data = {
+            "films": films,
+            "total_films": len(films),
+            "generated_at": datetime.now().isoformat()
+        }
+        
+        if recommendations:
+            output_data["recommendations"] = {
+                "count": len(recommendations),
+                "films": [
+                    {
+                        "rank": i + 1,
+                        "title": rec["film"]["title"],
+                        "director": rec["film"].get("director", ""),
+                        "year": rec["film"].get("year", ""),
+                        "score": rec["score"],
+                        "reasoning": rec["reasoning"],
+                        "film_data": rec["film"]
+                    }
+                    for i, rec in enumerate(recommendations)
+                ]
+            }
+        
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(films, f, indent=2, ensure_ascii=False)
-        logger.info(f"Exported {len(films)} films to {filename}")
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
+        
+        rec_msg = f" with {len(recommendations)} recommendations" if recommendations else ""
+        logger.info(f"Exported {len(films)} films{rec_msg} to {filename}")
 
 
 class CSVExporter:
     """Exporter for CSV format."""
     
     @staticmethod
-    def export(films: List[Dict], filename: str = "nyff_films.csv") -> None:
+    def export(films: List[Dict], filename: str = "nyff_films.csv", recommendations: List[Dict] = None) -> None:
         """Export films data to CSV with one row per showtime.
         
         Args:
             films: List of film dictionaries
             filename: Output filename
+            recommendations: Optional Letterboxd recommendations
         """
         csv_rows = []
         
@@ -66,6 +93,18 @@ class CSVExporter:
             likely_theatrical = 'TRUE' if film.get('likely_theatrical', False) else 'FALSE'
             trailer_url = film.get('trailer_url', '')
             youtube_search_url = film.get('youtube_search_url', '')
+            
+            # Check if this film is in recommendations
+            recommendation_score = ''
+            recommendation_reasoning = ''
+            recommendation_rank = ''
+            if recommendations:
+                for i, rec in enumerate(recommendations):
+                    if rec['film']['title'] == title:
+                        recommendation_score = rec['score']
+                        recommendation_reasoning = rec['reasoning']
+                        recommendation_rank = i + 1
+                        break
             
             # Handle showtimes - create one row per showtime
             showtimes = film.get('nyff_showtimes', [])
@@ -97,7 +136,10 @@ class CSVExporter:
                         'Is_Likely_To_Be_Distributed': is_likely_to_be_distributed,
                         'Likely_Theatrical': likely_theatrical,
                         'Trailer_URL': trailer_url,
-                        'YouTube_Search_URL': youtube_search_url
+                        'YouTube_Search_URL': youtube_search_url,
+                        'Recommendation_Rank': recommendation_rank,
+                        'Recommendation_Score': recommendation_score,
+                        'Recommendation_Reasoning': recommendation_reasoning
                     }
                     csv_rows.append(row)
             else:
@@ -127,7 +169,10 @@ class CSVExporter:
                     'Is_Likely_To_Be_Distributed': is_likely_to_be_distributed,
                     'Likely_Theatrical': likely_theatrical,
                     'Trailer_URL': trailer_url,
-                    'YouTube_Search_URL': youtube_search_url
+                    'YouTube_Search_URL': youtube_search_url,
+                    'Recommendation_Rank': recommendation_rank,
+                    'Recommendation_Score': recommendation_score,
+                    'Recommendation_Reasoning': recommendation_reasoning
                 }
                 csv_rows.append(row)
         
@@ -139,7 +184,8 @@ class CSVExporter:
             'Production_Companies', 'Distributors', 'IMDB_ID',
             'Theatrical_Release_Date', 'Distribution_Likelihood_Score',
             'Is_Likely_To_Be_Distributed', 'Likely_Theatrical',
-            'Trailer_URL', 'YouTube_Search_URL'
+            'Trailer_URL', 'YouTube_Search_URL',
+            'Recommendation_Rank', 'Recommendation_Score', 'Recommendation_Reasoning'
         ]
         
         with open(filename, 'w', newline='', encoding='utf-8') as f:
@@ -163,17 +209,42 @@ class MarkdownExporter:
     """Exporter for Markdown format."""
     
     @staticmethod
-    def export(films: List[Dict], filename: str = "nyff_films.md") -> None:
+    def export(films: List[Dict], filename: str = "nyff_films.md", recommendations: List[Dict] = None) -> None:
         """Export films data to Markdown.
         
         Args:
             films: List of film dictionaries
             filename: Output filename
+            recommendations: Optional Letterboxd recommendations
         """
         with open(filename, 'w', encoding='utf-8') as f:
             f.write("# NYFF Film Lineup\n\n")
             f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
             f.write(f"Total films: {len(films)}\n\n")
+            
+            # Add recommendations section if available
+            if recommendations:
+                f.write("## 🎬 Letterboxd Recommendations\n\n")
+                f.write(f"Based on your Letterboxd profile, here are our top {len(recommendations)} recommendations:\n\n")
+                
+                for i, rec in enumerate(recommendations, 1):
+                    film = rec['film']
+                    f.write(f"### {i}. {film['title']}")
+                    if film.get('year'):
+                        f.write(f" ({film['year']})")
+                    f.write(f" - Score: {rec['score']}\n\n")
+                    
+                    if film.get('director'):
+                        f.write(f"**Director:** {film['director']}\n\n")
+                    
+                    f.write(f"**Why recommended:** {rec['reasoning']}\n\n")
+                    
+                    if film.get('description'):
+                        f.write(f"**Description:** {film['description']}\n\n")
+                    
+                    f.write("---\n\n")
+                
+                f.write("\n## 📽️ All Films\n\n")
             
             for film in films:
                 f.write(f"## {film.get('title', 'Unknown Title')}\n\n")
@@ -286,13 +357,14 @@ class MarkdownExporter:
         print(f"Saved: {filename}")
 
 
-def export_all_formats(films: List[Dict], base_name: str = "nyff_films") -> None:
+def export_all_formats(films: List[Dict], base_name: str = "nyff_films", recommendations: List[Dict] = None) -> None:
     """Export films to all supported formats.
     
     Args:
         films: List of film dictionaries
         base_name: Base filename (without extension)
+        recommendations: Optional Letterboxd recommendations
     """
-    JSONExporter.export(films, f"{base_name}.json")
-    CSVExporter.export(films, f"{base_name}.csv") 
-    MarkdownExporter.export(films, f"{base_name}.md")
+    JSONExporter.export(films, f"{base_name}.json", recommendations=recommendations)
+    CSVExporter.export(films, f"{base_name}.csv", recommendations=recommendations) 
+    MarkdownExporter.export(films, f"{base_name}.md", recommendations=recommendations)

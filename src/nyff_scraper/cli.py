@@ -70,6 +70,12 @@ Examples:
         metavar='N',
         help='Limit processing to first N films (useful for testing)'
     )
+    processing_group.add_argument(
+        '--letterboxd',
+        type=str,
+        metavar='USERNAME',
+        help='Generate recommendations based on Letterboxd user profile'
+    )
 
     # Output options
     output_group = parser.add_argument_group('output options')
@@ -188,7 +194,32 @@ def run_scraper_pipeline(args) -> int:
             metadata_enricher = MetadataEnricher()
             films = metadata_enricher.enrich_films(films)
 
-        # Step 5: Export data
+        # Step 5: Generate Letterboxd recommendations (if requested)
+        recommendations = None
+        if args.letterboxd and not args.only_scrape:
+            print(f"Generating Letterboxd recommendations for user: {args.letterboxd}")
+            try:
+                from .letterboxd_utils import get_letterboxd_recommendations
+                recommendations = get_letterboxd_recommendations(
+                    films, 
+                    args.letterboxd, 
+                    cache_dir=args.cache_dir
+                )
+                if recommendations:
+                    print(f"Generated {len(recommendations)} recommendations")
+                    print("\nTop Recommendations:")
+                    for i, rec in enumerate(recommendations, 1):
+                        film_title = rec['film']['title']
+                        score = rec['score']
+                        reasoning = rec['reasoning']
+                        print(f"  {i}. {film_title} (score: {score}) - {reasoning}")
+                else:
+                    print("No recommendations could be generated")
+            except Exception as e:
+                logger.error(f"Error generating Letterboxd recommendations: {e}")
+                print(f"Failed to generate recommendations: {e}")
+
+        # Step 6: Export data
         print("Exporting data...")
 
         import os
@@ -199,16 +230,16 @@ def run_scraper_pipeline(args) -> int:
 
         if args.json_only:
             from .exporters import JSONExporter
-            JSONExporter.export(films, f"{base_path}.json")
+            JSONExporter.export(films, f"{base_path}.json", recommendations=recommendations)
         elif args.csv_only:
             from .exporters import CSVExporter
-            CSVExporter.export(films, f"{base_path}.csv")
+            CSVExporter.export(films, f"{base_path}.csv", recommendations=recommendations)
         elif args.markdown_only:
             from .exporters import MarkdownExporter
-            MarkdownExporter.export(films, f"{base_path}.md")
+            MarkdownExporter.export(films, f"{base_path}.md", recommendations=recommendations)
         else:
             # Export all formats
-            export_all_formats(films, base_path)
+            export_all_formats(films, base_path, recommendations=recommendations)
 
         # Final summary
         print(f"\nScraping completed successfully!")
