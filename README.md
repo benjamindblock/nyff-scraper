@@ -103,6 +103,9 @@ nyff-scraper --only-scrape
 # Skip specific enrichment steps
 nyff-scraper --skip-imdb --skip-trailers
 
+# Check your letterboxd account for things it could recommend
+nyff-scraper --letterboxd yourusername
+
 # Custom output location
 nyff-scraper --output-dir ./results --output-name my_films
 
