@@ -1,5 +1,6 @@
 """
 YouTube trailer enricher for adding trailer URLs to film data.
+Uses Google search instead of scraping YouTube directly.
 
 Author: Jack Murphy
 """
@@ -7,7 +8,9 @@ Author: Jack Murphy
 import requests
 import re
 import time
+import string
 import logging
+from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -23,20 +26,15 @@ class TrailerEnricher:
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
 
+    @staticmethod
+    def normalize_text(text: str) -> str:
+        """Lowercase, strip punctuation, collapse spaces."""
+        translator = str.maketrans("", "", string.punctuation)
+        return " ".join(text.lower().translate(translator).split())
+
     def search_youtube_trailer(self, title: str, year: str, director: str = "", is_restoration: bool = False) -> Optional[str]:
-        """Search for a film trailer on YouTube using direct HTTP requests.
-
-        Args:
-            title: Film title to search for
-            year: Year of the film
-            director: Director name to include in search
-            is_restoration: Whether this is a restoration
-
-        Returns:
-            YouTube URL of the best found trailer, or empty string if none found
-        """
+        """Search YouTube for a film trailer, validating against the film title."""
         try:
-            # Build search query
             query_parts = [title]
             if director:
                 query_parts.append(director)
@@ -51,38 +49,46 @@ class TrailerEnricher:
             response = self.session.get(search_url, params=params, timeout=10)
             response.raise_for_status()
 
-            # Extract candidate videoIds and titles
-            video_pattern = r'"videoId":"(?P<id>[^"]+)".*?"title":{"runs":\[{"text":"(?P<title>[^"]+)"}\]}'
-            matches = list(re.finditer(video_pattern, response.text))
+            # Collect all candidate video IDs
+            video_ids = re.findall(r'"videoId":"([^"]+)"', response.text)
+            if not video_ids:
+                logger.warning(f"No video IDs found for '{title}'")
+                return ""
 
-            film_title = title.lower()
-            best_url = ""
+            film_norm = self.normalize_text(title)
 
-            for m in matches:
-                vid_id = m.group("id")
-                vid_title = m.group("title").lower()
+            for vid in video_ids[:10]:  # check top 10 to avoid too many requests
+                video_url = f"https://www.youtube.com/watch?v={vid}"
+                try:
+                    vresp = self.session.get(video_url, timeout=10)
+                    vresp.raise_for_status()
 
-                # Only accept results that look like trailers
-                if "trailer" in vid_title:
-                    # Prefer matches where the video title contains the film title
-                    if all(word in vid_title for word in film_title.split()[:2]):
-                        best_url = f"https://www.youtube.com/watch?v={vid_id}"
-                        break
-                    # fallback: first trailer found
-                    if not best_url:
-                        best_url = f"https://www.youtube.com/watch?v={vid_id}"
+                    # Extract <title> tag from the HTML
+                    m = re.search(r"<title>(.*?)</title>", vresp.text, re.IGNORECASE | re.DOTALL)
+                    if not m:
+                        continue
 
-            if best_url:
-                logger.info(f"Found trailer for '{title}': {best_url}")
-                return best_url
+                    video_title = m.group(1)
+                    video_title_norm = self.normalize_text(video_title)
 
-            logger.warning(f"No trailer found for '{title}'")
+                    # Check if most of the film title words appear in video title
+                    film_words = set(film_norm.split())
+                    overlap = sum(1 for w in film_words if w in video_title_norm)
+
+                    if film_words and overlap / len(film_words) >= 0.6:
+                        logger.info(f"Matched trailer for '{title}' -> {video_url} ({video_title.strip()})")
+                        return video_url
+
+                except Exception as e:
+                    logger.debug(f"Error checking video {vid}: {e}")
+                    continue
+
+            logger.warning(f"No matching trailer found for '{title}' after checking candidates")
             return ""
 
         except Exception as e:
             logger.error(f"Error searching YouTube for '{title}': {e}")
             return ""
-
 
     def construct_youtube_search_url(self, title: str, year: str, director: str = "") -> str:
         """Construct a YouTube search URL for manual searching.
@@ -129,7 +135,6 @@ class TrailerEnricher:
             year = film.get('year', '')
             director = film.get('director', '')
             is_short_program = film.get('is_short_program', False)
-            is_restoration = film.get('is_restoration', False)
 
             # Skip trailer search for shorts programs
             if is_short_program:
@@ -138,15 +143,15 @@ class TrailerEnricher:
                 film['youtube_search_url'] = ""
             elif search_trailers and title and year:
                 # Active search for trailer
-                trailer_url = self.search_youtube_trailer(title, year, director, is_restoration)
+                trailer_url = self.search_youtube_trailer(title, year, director)
                 film['trailer_url'] = trailer_url
-                # Be nice to YouTube - delay between searches
+                # Be nice to Google - delay between searches
                 time.sleep(2)
 
-                # Always provide search URL
+                # Always provide manual search URL
                 film['youtube_search_url'] = self.construct_youtube_search_url(title, year, director)
             else:
-                # Just provide search URL for manual lookup
+                # Just provide manual search URL
                 film['trailer_url'] = ""
                 if title and year:
                     film['youtube_search_url'] = self.construct_youtube_search_url(title, year, director)
