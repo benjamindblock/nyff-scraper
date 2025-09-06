@@ -6,7 +6,9 @@ A Python tool for scraping the New York Film Festival (NYFF) website, useful for
 
 ## Features
 
-The script grabs everything showing at NYFF, looks up IMDb data for production company information, runtimes, possible release date if available, and compiles it. It also looks up trailers, etc.
+The script grabs everything showing at NYFF, looks up IMDb data for production company information, runtimes, possible release date if available, and compiles it. It also looks up trailers, whether a screening is sold out, etc.
+
+The NYFF doesn't have centralized trailers, nor will it list release dates - this does that for you.
 
 ## Quick Start
 
