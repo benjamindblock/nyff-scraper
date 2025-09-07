@@ -9,7 +9,7 @@ import logging
 import sys
 from typing import Optional
 
-from .scraper import NYFFScraper
+from .scraper import NYFFScraper, DEFAULT_URL, DEFAULT_BACKUP_URL
 from .imdb_enricher import IMDbEnricher
 from .trailer_enricher import TrailerEnricher
 from .metadata_enricher import MetadataEnricher
@@ -30,7 +30,7 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  nyff-scraper                                          # Scrape default NYFF URL with all features
+  nyff-scraper                                         # Scrape default NYFF URL with all features
   nyff-scraper --url https://example.com/films         # Scrape custom URL
   nyff-scraper --only-scrape                           # Only scrape, no enrichment
   nyff-scraper --skip-trailers                         # Skip YouTube trailer search
@@ -43,8 +43,15 @@ Examples:
     parser.add_argument(
         'url',
         nargs='?',
-        default="https://www.filmlinc.org/nyff/nyff63-lineup/",
+        default=DEFAULT_URL,
         help='URL to scrape (default: NYFF 2025 lineup)'
+    )
+
+    parser.add_argument(
+        '--backup-url',
+        required=False,
+        default=DEFAULT_BACKUP_URL,
+        help='Backup URL in case primary fails (default: NYFF 2025 lineup on the Wayback Machine)'
     )
 
     # Processing options
@@ -167,7 +174,7 @@ def run_scraper_pipeline(args) -> int:
 
         # Step 1: Scrape film data
         print("Scraping NYFF film lineup...")
-        films = scraper.scrape_nyff_lineup(args.url, force_refresh=args.force_refresh_nyff)
+        films = scraper.scrape_nyff_lineup(args.url, args.backup_url, force_refresh=args.force_refresh_nyff)
 
         if not films:
             logger.error("No films found at the provided URL")
