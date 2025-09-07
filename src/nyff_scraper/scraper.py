@@ -10,90 +10,101 @@ import os
 import time
 import re
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from urllib.parse import urljoin
+from .exceptions import NetworkError, CacheError, ParsingError, DataExtractionError
 
 logger = logging.getLogger(__name__)
 
+# Constants
 DEFAULT_URL = "https://www.filmlinc.org/nyff/nyff63-lineup/"
 DEFAULT_BACKUP_URL = "https://web.archive.org/web/20250831221540/https://www.filmlinc.org/nyff/nyff63-lineup/"
+DEFAULT_CACHE_MAX_AGE_MINUTES = 45
+DEFAULT_REQUEST_TIMEOUT = 30
+DEFAULT_REQUEST_DELAY = 1
+METADATA_YEAR_LENGTH = 4
+USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 
 
 class NYFFScraper:
     """Scraper for NYFF film lineup pages."""
 
-    def __init__(self, cache_dir: str = "cache"):
+    def __init__(self, cache_dir: str = "cache") -> None:
         """Initialize the scraper with optional caching.
 
         Args:
             cache_dir: Directory to cache web requests
         """
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        })
+        self.session.headers.update({'User-Agent': USER_AGENT})
         self.cache_dir = cache_dir
         self.ensure_cache_dir()
 
     def ensure_cache_dir(self) -> None:
-        """Create cache directory if it doesn't exist."""
+        """Create cache directory if it doesn't exist.
+        
+        Raises:
+            OSError: If directory creation fails
+        """
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
 
-    def get_cached_or_fetch(self, url: str, filename: str, max_age_minutes: int = None, force_refresh: bool = False) -> str:
+    def get_cached_or_fetch(self, url: str, filename: str, max_age_minutes: Optional[int] = None, force_refresh: bool = False) -> Optional[str]:
         """Get content from cache or fetch from URL.
 
         Args:
-            url: URL to fetch
-            filename: Cache filename
-            max_age_minutes: Maximum age of cache file in minutes (None = no age limit)
-            force_refresh: Force refresh even if cache exists
+            url: URL to fetch content from
+            filename: Cache filename to use for storage
+            max_age_minutes: Maximum age of cache file in minutes. If None, no age limit is applied
+            force_refresh: If True, ignore cache and always fetch fresh content
 
         Returns:
-            HTML content as string
+            HTML content as string if successful, None if fetch failed
+            
+        Raises:
+            NetworkError: If both primary and backup network requests fail
         """
-        import time as time_module
-        cache_path = os.path.join(self.cache_dir, filename)
+        cache_file_path = os.path.join(self.cache_dir, filename)
 
         # Check if we should use cached file
-        use_cache = False
-        if os.path.exists(cache_path) and not force_refresh:
+        should_use_cache = False
+        if os.path.exists(cache_file_path) and not force_refresh:
             if max_age_minutes is None:
-                use_cache = True
+                should_use_cache = True
             else:
                 # Check file age
-                file_age_seconds = time_module.time() - os.path.getmtime(cache_path)
+                file_age_seconds = time.time() - os.path.getmtime(cache_file_path)
                 file_age_minutes = file_age_seconds / 60
                 if file_age_minutes <= max_age_minutes:
-                    use_cache = True
+                    should_use_cache = True
                 else:
                     logger.info(f"Cache file {filename} is {file_age_minutes:.1f} minutes old (max: {max_age_minutes}), refreshing")
 
-        if use_cache:
+        if should_use_cache:
             logger.info(f"Loading from cache: {filename}")
-            with open(cache_path, 'r', encoding='utf-8') as f:
+            with open(cache_file_path, 'r', encoding='utf-8') as f:
                 return f.read()
 
         logger.info(f"Fetching: {url}")
         try:
-            response = self.session.get(url, timeout=30)
+            response = self.session.get(url, timeout=DEFAULT_REQUEST_TIMEOUT)
             response.raise_for_status()
             content = response.text
 
             # Cache the content
             os.makedirs(self.cache_dir, exist_ok=True)
-            with open(cache_path, 'w', encoding='utf-8') as f:
+            with open(cache_file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
             # Be nice to servers
-            time.sleep(1)
+            time.sleep(DEFAULT_REQUEST_DELAY)
             return content
 
         except requests.RequestException as e:
             logger.error(f"Error fetching {url}: {e}")
-            return ""
+            return None
 
-    def scrape_nyff_lineup(self, url: str = None, backup_url: str = None, force_refresh: bool = False) -> List[Dict]:
+    def scrape_nyff_lineup(self, url: Optional[str] = None, backup_url: Optional[str] = None, force_refresh: bool = False) -> List[Dict]:
         """Scrape NYFF lineup page for films and showtimes.
 
         Args:
@@ -104,24 +115,29 @@ class NYFFScraper:
         Returns:
             List of film dictionaries
         """
-        if url is None:
-            url = DEFAULT_URL
+        url = url or DEFAULT_URL
+        backup_url = backup_url or DEFAULT_BACKUP_URL
 
-        if backup_url is None:
-            backup_url = DEFAULT_BACKUP_URL
+        # Use cache age limit for NYFF lineup
+        content = self.get_cached_or_fetch(url, "nyff_lineup.html", max_age_minutes=DEFAULT_CACHE_MAX_AGE_MINUTES, force_refresh=force_refresh)
 
-        # Use 45 minute cache age limit for NYFF lineup
-        content = self.get_cached_or_fetch(url, "nyff_lineup.html", max_age_minutes=45, force_refresh=force_refresh)
-
-        # Use the backup URL if the primary failed. Also apply a 45 minute cache.
-        if content == "":
-            logger.info(f"Failed to fetch data with primary URL, proceeding with backup URL.")
-            content = self.get_cached_or_fetch(backup_url, "nyff_lineup.html", max_age_minutes=45, force_refresh=force_refresh)
+        # Use the backup URL if the primary failed
+        if content is None:
+            logger.info("Failed to fetch data with primary URL, proceeding with backup URL.")
+            try:
+                content = self.get_cached_or_fetch(backup_url, "nyff_lineup.html", max_age_minutes=DEFAULT_CACHE_MAX_AGE_MINUTES, force_refresh=force_refresh)
+            except NetworkError as e:
+                logger.error(f"Both primary and backup URLs failed: {e}")
+                content = None
 
         if not content:
+            logger.warning("No content retrieved from primary or backup URLs")
             return []
 
-        soup = BeautifulSoup(content, 'html.parser')
+        try:
+            soup = BeautifulSoup(content, 'html.parser')
+        except Exception as e:
+            raise ParsingError(f"Failed to parse HTML content: {e}") from e
         films = []
 
         # Look for film containers based on NYFF structure
@@ -162,16 +178,18 @@ class NYFFScraper:
                 return None
 
             # Extract director
-            director = ""
+            director = None
             director_elem = title_link.find_next('p')
             if director_elem:
-                director = director_elem.get_text(strip=True)
+                director_text = director_elem.get_text(strip=True)
+                director = director_text if director_text else None
 
             # Extract description
-            description = ""
+            description = None
             prose_section = element.select_one('.typography.prose p')
             if prose_section:
-                description = prose_section.get_text(strip=True)
+                description_text = prose_section.get_text(strip=True)
+                description = description_text if description_text else None
 
             # Extract showtimes
             showtimes = self.extract_showtimes(element)
@@ -193,18 +211,18 @@ class NYFFScraper:
             logger.error(f"Error extracting film data: {e}")
             return None
 
-    def extract_metadata(self, element) -> tuple[str, str, str]:
+    def extract_metadata(self, element) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """Extract year, country, and runtime metadata.
 
         Args:
             element: BeautifulSoup element containing metadata
 
         Returns:
-            Tuple of (year, country, runtime)
+            Tuple of (year, country, runtime), each can be None if not found
         """
-        year = ""
-        country = ""
-        runtime = ""
+        year = None
+        country = None
+        runtime = None
 
         # Strategy 1: Look for flex container with metadata paragraphs
         flex_container = element.select_one('div.flex.flex-wrap')
@@ -217,7 +235,7 @@ class NYFFScraper:
                 clean_text = text.replace('|', '').strip()
                 
                 # Check if it's a year (4 digits)
-                if clean_text.isdigit() and len(clean_text) == 4:
+                if clean_text.isdigit() and len(clean_text) == METADATA_YEAR_LENGTH:
                     year = clean_text
                 # Check if it contains "minutes" (runtime)
                 elif 'minute' in clean_text.lower():
@@ -227,11 +245,11 @@ class NYFFScraper:
                     # This is the subtitle line, skip it
                     continue
                 # Otherwise, assume it's country (if not already found and not empty)
-                elif not country and clean_text and clean_text not in [year, runtime]:
+                elif country is None and clean_text and clean_text not in [year, runtime]:
                     country = clean_text
         
         # Strategy 2: Fallback to original method
-        if not year and not country and not runtime:
+        if year is None and country is None and runtime is None:
             metadata_ps = element.select('p[data-typography-mobile="body-xs"]')
             for p in metadata_ps:
                 text = p.get_text(strip=True)
@@ -270,9 +288,10 @@ class NYFFScraper:
         for date_section in date_sections:
             # Extract date
             date_elem = date_section.select_one('p[data-typography-mobile="d-eyebrow-sm"]')
-            date = ""
+            date = None
             if date_elem:
-                date = date_elem.get_text(strip=True)
+                date_text = date_elem.get_text(strip=True)
+                date = date_text if date_text else None
 
             # Extract time buttons
             time_buttons = date_section.select('button')
@@ -281,9 +300,9 @@ class NYFFScraper:
 
                 # Extract time from button text
                 time_match = re.search(r'\d{1,2}:\d{2}\s*(?:AM|PM)', button_text)
-                time = ""
+                showtime_time = None
                 if time_match:
-                    time = time_match.group()
+                    showtime_time = time_match.group()
 
                 # Check for special notes
                 notes = []
@@ -293,10 +312,11 @@ class NYFFScraper:
                     notes.append('Intro')
 
                 # Check availability - multiple ways a showtime can be sold out
+                button_classes = ' '.join(button.get('class', []))
                 is_disabled = (
                     button.get('disabled') is not None or
-                    'cursor-not-allowed' in ' '.join(button.get('class', [])) or
-                    'disabled' in ' '.join(button.get('class', []))
+                    'cursor-not-allowed' in button_classes or
+                    'disabled' in button_classes
                 )
                 
                 # Check for line-through styling on child elements (new structure)
@@ -304,10 +324,10 @@ class NYFFScraper:
                 
                 is_available = not (is_disabled or has_linethrough)
 
-                if time:
+                if showtime_time:
                     showtime_data = {
                         "date": date,
-                        "time": time,
+                        "time": showtime_time,
                         "venue": "TBA",
                         "notes": notes,
                         "available": is_available,

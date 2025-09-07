@@ -195,14 +195,14 @@ class MetadataEnricher:
         # If we can't determine, default to feature
         return 'feature'
     
-    def clean_notes(self, notes: str) -> str:
+    def clean_notes(self, notes: Optional[str]) -> str:
         """Clean up notes to be plain text without emojis.
         
         Args:
-            notes: Original notes string
+            notes: Original notes string, can be None
             
         Returns:
-            Cleaned notes string
+            Cleaned notes string, empty if input was None or empty
         """
         if not notes:
             return ""
@@ -254,7 +254,7 @@ class MetadataEnricher:
             enriched_film = self.distribution_scorer.enrich_film_with_distribution_score(film)
             
             # Clean up existing notes
-            if 'notes' in enriched_film:
+            if 'notes' in enriched_film and enriched_film['notes'] is not None:
                 enriched_film['notes'] = self.clean_notes(str(enriched_film['notes']))
             else:
                 # Create structured notes from available data
@@ -269,7 +269,7 @@ class MetadataEnricher:
                 if not enriched_film['is_likely_to_be_distributed']:
                     notes_parts.append("Limited distribution expected")
                 
-                enriched_film['notes'] = "; ".join(notes_parts) if notes_parts else ""
+                enriched_film['notes'] = "; ".join(notes_parts) if notes_parts else None
             
             enriched_films.append(enriched_film)
         

@@ -9,7 +9,7 @@ import csv
 import os
 import logging
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class JSONExporter:
     """Exporter for JSON format."""
     
     @staticmethod
-    def export(films: List[Dict], filename: str = "nyff_films.json", recommendations: List[Dict] = None, incremental: bool = True) -> None:
+    def export(films: List[Dict], filename: str = "nyff_films.json", recommendations: Optional[List[Dict]] = None, incremental: bool = True) -> None:
         """Export films data to JSON with optional incremental updates.
         
         Args:
@@ -68,7 +68,7 @@ class JSONExporter:
         logger.info(f"Exported {len(films)} films{rec_msg} to {filename}")
     
     @staticmethod
-    def _merge_films_incrementally(new_films: List[Dict], existing_file: str) -> List[Dict]:
+    def _merge_films_incrementally(new_films: List[Dict], existing_file: str) -> Optional[List[Dict]]:
         """Merge new films with existing JSON file incrementally.
         
         Args:
@@ -145,7 +145,7 @@ class CSVExporter:
     """Exporter for CSV format."""
     
     @staticmethod
-    def export(films: List[Dict], filename: str = "nyff_films.csv", recommendations: List[Dict] = None) -> None:
+    def export(films: List[Dict], filename: str = "nyff_films.csv", recommendations: Optional[List[Dict]] = None) -> None:
         """Export films data to CSV with one row per showtime.
         
         Args:
@@ -157,12 +157,12 @@ class CSVExporter:
         
         for film in films:
             # Get basic film info in requested field order
-            title = film.get('title', '')
-            director = film.get('director', '')
-            year = film.get('year', '')
-            country = film.get('country', '')
-            runtime = film.get('runtime', '')
-            description = film.get('description', '')
+            title = film.get('title') or ''
+            director = film.get('director') or ''
+            year = film.get('year') or ''
+            country = film.get('country') or ''
+            runtime = film.get('runtime') or ''
+            description = film.get('description') or ''
             category = film.get('category', 'feature')
             is_short_program = 'TRUE' if film.get('is_short_program', False) else 'FALSE'
             is_restoration = 'TRUE' if film.get('is_restoration', False) else 'FALSE'
@@ -170,8 +170,8 @@ class CSVExporter:
             notes = film.get('notes', '')
             
             # Production and distribution info
-            production_companies = '; '.join(film.get('production_companies', []))
-            distributors = '; '.join(film.get('distributors', []))
+            production_companies = '; '.join(film.get('production_companies') or [])
+            distributors = '; '.join(film.get('distributors') or [])
             imdb_id = film.get('imdb_id', '')
             theatrical_release_date = film.get('theatrical_release_date', '')
             distribution_likelihood_score = film.get('distribution_likelihood_score', 0)
@@ -181,16 +181,16 @@ class CSVExporter:
             youtube_search_url = film.get('youtube_search_url', '')
             
             # Check if this film is in recommendations
-            recommendation_score = ''
-            recommendation_reasoning = ''
-            recommendation_rank = ''
+            recommendation_data = None
             if recommendations:
-                for i, rec in enumerate(recommendations):
-                    if rec['film']['title'] == title:
-                        recommendation_score = rec['score']
-                        recommendation_reasoning = rec['reasoning']
-                        recommendation_rank = i + 1
-                        break
+                recommendation_data = next(
+                    (rec for rec in recommendations if rec['film']['title'] == title),
+                    None
+                )
+            
+            recommendation_score = recommendation_data['score'] if recommendation_data else ''
+            recommendation_reasoning = recommendation_data['reasoning'] if recommendation_data else ''
+            recommendation_rank = (recommendations.index(recommendation_data) + 1) if recommendation_data else ''
             
             # Handle showtimes - create one row per showtime
             showtimes = film.get('nyff_showtimes', [])
@@ -295,7 +295,7 @@ class MarkdownExporter:
     """Exporter for Markdown format."""
     
     @staticmethod
-    def export(films: List[Dict], filename: str = "nyff_films.md", recommendations: List[Dict] = None) -> None:
+    def export(films: List[Dict], filename: str = "nyff_films.md", recommendations: Optional[List[Dict]] = None) -> None:
         """Export films data to Markdown.
         
         Args:
@@ -443,7 +443,7 @@ class MarkdownExporter:
         print(f"Saved: {filename}")
 
 
-def export_all_formats(films: List[Dict], base_name: str = "nyff_films", recommendations: List[Dict] = None) -> None:
+def export_all_formats(films: List[Dict], base_name: str = "nyff_films", recommendations: Optional[List[Dict]] = None) -> None:
     """Export films to all supported formats.
     
     Args:

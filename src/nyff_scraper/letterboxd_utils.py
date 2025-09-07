@@ -1,6 +1,8 @@
 """
 Letterboxd integration for generating film recommendations.
 
+Still experimental!!!
+
 This module scrapes Letterboxd user profiles and generates recommendations
 for NYFF films based on similarity scoring with the user's watched films.
 
