@@ -10,8 +10,8 @@ Author: Jack Murphy
 
 import re
 import logging
-from typing import Dict, Optional, Tuple
 from datetime import datetime
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,13 @@ class DistributionLikelihoodScorer:
         """Initialize the distribution likelihood scorer."""
         # Festival section weights
         # Main Slate and Spotlight films are virtually guaranteed distribution
-        # Restorations, shorts, and currents are least likely for theatrical release
+        # Restorations, shorts, and currents are least likely for theatrical
+        # release
         self.section_weights = {
             'main slate': 50,      # Guaranteed distribution
             'spotlight': 45,       # Very likely distribution
-            'currents': -40,       # Experimental/art house - limited appeal, though not impossible.
+            # Experimental/art house - limited appeal, though not impossible.
+            'currents': -40,
             'restoration': -70,    # Classic films - very limited theatrical potential
             'revivals': -70,       # Same as restoration
             'shorts': -80          # Shorts programs - least likely for distribution
@@ -53,7 +55,8 @@ class DistributionLikelihoodScorer:
             Section name (lowercase) or 'unknown' if not determinable
         """
         # Check existing category field first
-        category = film.get('category', '').lower()
+        category = film.get('category') or ''
+        category = category.lower() if category else ''
         if category in ['shorts', 'restoration']:
             return category
 
@@ -66,8 +69,10 @@ class DistributionLikelihoodScorer:
             return 'restoration'
 
         # Check title and description for section indicators
-        title = film.get('title', '').lower()
-        description = film.get('description', '').lower()
+        title = film.get('title') or ''
+        title = title.lower() if title else ''
+        description = film.get('description') or ''
+        description = description.lower() if description else ''
 
         # Main Slate indicators
         main_slate_indicators = [
@@ -114,7 +119,8 @@ class DistributionLikelihoodScorer:
         # Default to unknown if we can't determine
         return 'unknown'
 
-    def extract_theatrical_release_date(self, imdb_content: str = None) -> Optional[str]:
+    def extract_theatrical_release_date(
+            self, imdb_content: str = None) -> Optional[str]:
         """
         Extract theatrical release date from IMDb content.
 
@@ -141,7 +147,10 @@ class DistributionLikelihoodScorer:
         """
         return self.section_weights.get(festival_section, 0)
 
-    def calculate_imdb_score(self, film: Dict, theatrical_release_date: Optional[str] = None) -> int:
+    def calculate_imdb_score(
+            self,
+            film: Dict,
+            theatrical_release_date: Optional[str] = None) -> int:
         """
         Calculate score based on IMDb metadata.
 
@@ -194,7 +203,8 @@ class DistributionLikelihoodScorer:
 
         return score
 
-    def calculate_distribution_likelihood_score(self, film: Dict) -> Tuple[int, bool, Optional[str]]:
+    def calculate_distribution_likelihood_score(
+            self, film: Dict) -> Tuple[int, bool, Optional[str]]:
         """
         Calculate comprehensive distribution likelihood score.
 
@@ -212,7 +222,8 @@ class DistributionLikelihoodScorer:
         section_score = self.calculate_festival_section_score(festival_section)
         total_score += section_score
 
-        logger.debug(f"Festival section '{festival_section}': {section_score} points")
+        logger.debug(
+            f"Festival section '{festival_section}': {section_score} points")
 
         # 2. IMDb metadata scoring
         theatrical_release_date = film.get('theatrical_release_date')
@@ -243,10 +254,10 @@ class DistributionLikelihoodScorer:
         else:
             reason = f"likelihood score {final_score}"
             status_word = "Likely" if final_score >= 50 else "Unlikely"
-        
+
         logger.info(f"Film '{film.get('title', 'Unknown')}': "
-                   f"Section={festival_section}, Score={final_score}, "
-                   f"Distribution={status_word} ({reason})")
+                    f"Section={festival_section}, Score={final_score}, "
+                    f"Distribution={status_word} ({reason})")
 
         return final_score, is_likely_distributed, theatrical_release_date
 
@@ -260,7 +271,8 @@ class DistributionLikelihoodScorer:
         Returns:
             Enriched film dictionary with new scoring fields
         """
-        score, is_likely, release_date = self.calculate_distribution_likelihood_score(film)
+        score, is_likely, release_date = self.calculate_distribution_likelihood_score(
+            film)
 
         # Add new fields
         film['distribution_likelihood_score'] = score
@@ -282,13 +294,16 @@ class DistributionLikelihoodScorer:
         Returns:
             List of enriched film dictionaries
         """
-        logger.info(f"Calculating distribution likelihood scores for {len(films)} films")
+        logger.info(
+            f"Calculating distribution likelihood scores for {
+                len(films)} films")
 
         enriched_films = []
         score_distribution = {'0-25': 0, '26-50': 0, '51-75': 0, '76-100': 0}
 
         for i, film in enumerate(films):
-            logger.debug(f"Processing film {i+1}/{len(films)}: {film.get('title', 'Unknown')}")
+            logger.debug(
+                f"Processing film {i + 1}/{len(films)}: {film.get('title', 'Unknown')}")
 
             enriched_film = self.enrich_film_with_distribution_score(film)
             enriched_films.append(enriched_film)
@@ -305,9 +320,13 @@ class DistributionLikelihoodScorer:
                 score_distribution['76-100'] += 1
 
         # Log summary statistics
-        likely_distributed = len([f for f in enriched_films if f['is_likely_to_be_distributed']])
+        likely_distributed = len(
+            [f for f in enriched_films if f['is_likely_to_be_distributed']])
         logger.info(f"Distribution scoring complete:")
-        logger.info(f"  Films likely to be distributed: {likely_distributed}/{len(films)} ({likely_distributed/len(films)*100:.1f}%)")
+        logger.info(
+            f"  Films likely to be distributed: {likely_distributed}/{
+                len(films)} ({
+                likely_distributed / len(films) * 100:.1f}%)")
         logger.info(f"  Score distribution: {score_distribution}")
 
         return enriched_films

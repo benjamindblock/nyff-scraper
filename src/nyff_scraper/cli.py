@@ -7,7 +7,6 @@ Author: Jack Murphy
 import argparse
 import logging
 import sys
-from typing import Optional
 
 from .scraper import NYFFScraper, DEFAULT_URL, DEFAULT_BACKUP_URL
 from .imdb_enricher import IMDbEnricher
@@ -36,8 +35,7 @@ Examples:
   nyff-scraper --skip-trailers                         # Skip YouTube trailer search
   nyff-scraper --limit 10                              # Test with first 10 films only
   nyff-scraper --output-dir ./results                  # Save files to specific directory
-        """
-    )
+        """)
 
     # Main arguments
     parser.add_argument(
@@ -94,8 +92,7 @@ Examples:
     output_group.add_argument(
         '--output-dir',
         default='.',
-        help='Output directory for generated files (default: current directory)'
-    )
+        help='Output directory for generated files (default: current directory)')
     output_group.add_argument(
         '--output-name',
         default='nyff_films',
@@ -174,7 +171,8 @@ def run_scraper_pipeline(args) -> int:
 
         # Step 1: Scrape film data
         print("Scraping NYFF film lineup...")
-        films = scraper.scrape_nyff_lineup(args.url, args.backup_url, force_refresh=args.force_refresh_nyff)
+        films = scraper.scrape_nyff_lineup(
+            args.url, args.backup_url, force_refresh=args.force_refresh_nyff)
 
         if not films:
             logger.error("No films found at the provided URL")
@@ -195,7 +193,8 @@ def run_scraper_pipeline(args) -> int:
         if not args.only_scrape and not args.skip_trailers:
             print("Searching for YouTube trailers...")
             trailer_enricher = TrailerEnricher()
-            films = trailer_enricher.enrich_films(films, search_trailers=True, limit=args.limit)
+            films = trailer_enricher.enrich_films(
+                films, search_trailers=True, limit=args.limit)
 
             with_trailers = len([f for f in films if f.get('trailer_url')])
             print(f"Found trailers for {with_trailers}/{len(films)} films")
@@ -209,12 +208,14 @@ def run_scraper_pipeline(args) -> int:
         # Step 5: Generate Letterboxd recommendations (if requested)
         recommendations = None
         if args.letterboxd and not args.only_scrape:
-            print(f"Generating Letterboxd recommendations for user: {args.letterboxd}")
+            print(
+                f"Generating Letterboxd recommendations for user: {
+                    args.letterboxd}")
             try:
                 from .letterboxd_utils import get_letterboxd_recommendations
                 recommendations = get_letterboxd_recommendations(
-                    films, 
-                    args.letterboxd, 
+                    films,
+                    args.letterboxd,
                     cache_dir=args.cache_dir
                 )
                 if recommendations:
@@ -224,11 +225,13 @@ def run_scraper_pipeline(args) -> int:
                         film_title = rec['film']['title']
                         score = rec['score']
                         reasoning = rec['reasoning']
-                        print(f"  {i}. {film_title} (score: {score}) - {reasoning}")
+                        print(
+                            f"  {i}. {film_title} (score: {score}) - {reasoning}")
                 else:
                     print("No recommendations could be generated")
             except Exception as e:
-                logger.error(f"Error generating Letterboxd recommendations: {e}")
+                logger.error(
+                    f"Error generating Letterboxd recommendations: {e}")
                 print(f"Failed to generate recommendations: {e}")
 
         # Step 6: Export data
@@ -257,16 +260,27 @@ def run_scraper_pipeline(args) -> int:
         # Export separate Letterboxd recommendations if requested
         if args.letterboxd and recommendations:
             print("Exporting Letterboxd recommendations...")
-            letterboxd_base = os.path.join(args.output_dir, f"{args.output_name}_letterboxd_recommendations")
-            
+            letterboxd_base = os.path.join(
+                args.output_dir, f"{
+                    args.output_name}_letterboxd_recommendations")
+
             from .exporters import JSONExporter, CSVExporter, MarkdownExporter
-            JSONExporter.export(films, f"{letterboxd_base}.json", recommendations=recommendations)
-            CSVExporter.export(films, f"{letterboxd_base}.csv", recommendations=recommendations) 
-            MarkdownExporter.export(films, f"{letterboxd_base}.md", recommendations=recommendations)
-            
+            JSONExporter.export(
+                films,
+                f"{letterboxd_base}.json",
+                recommendations=recommendations)
+            CSVExporter.export(
+                films,
+                f"{letterboxd_base}.csv",
+                recommendations=recommendations)
+            MarkdownExporter.export(
+                films,
+                f"{letterboxd_base}.md",
+                recommendations=recommendations)
+
             print(f"Letterboxd recommendations exported to:")
             print(f"  - {letterboxd_base}.json")
-            print(f"  - {letterboxd_base}.csv") 
+            print(f"  - {letterboxd_base}.csv")
             print(f"  - {letterboxd_base}.md")
 
         # Final summary
@@ -281,25 +295,28 @@ def run_scraper_pipeline(args) -> int:
             if not args.skip_trailers:
                 with_trailers = len([f for f in films if f.get('trailer_url')])
                 print(f"Trailers found: {with_trailers}")
-            
+
             # Metadata summary
-            short_programs = len([f for f in films if f.get('is_short_program')])
+            short_programs = len(
+                [f for f in films if f.get('is_short_program')])
             restorations = len([f for f in films if f.get('is_restoration')])
-            with_intro_qna = len([f for f in films if f.get('has_intro_or_qna')])
-            likely_distributed = len([f for f in films if f.get('is_likely_to_be_distributed')])
-            
+            with_intro_qna = len(
+                [f for f in films if f.get('has_intro_or_qna')])
+            likely_distributed = len(
+                [f for f in films if f.get('is_likely_to_be_distributed')])
+
             print(f"Classification summary:")
             print(f"  Short programs: {short_programs}")
             print(f"  Restorations: {restorations}")
             print(f"  With intro/Q&A: {with_intro_qna}")
             print(f"  Likely distributed: {likely_distributed}")
-            
+
             # Category breakdown
             categories = {}
             for film in films:
                 cat = film.get('category', 'feature')
                 categories[cat] = categories.get(cat, 0) + 1
-            
+
             print(f"Category breakdown: {dict(sorted(categories.items()))}")
 
         return 0

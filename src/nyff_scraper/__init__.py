@@ -17,11 +17,11 @@ from .exporters import JSONExporter, CSVExporter, MarkdownExporter
 
 __all__ = [
     "NYFFScraper",
-    "IMDbEnricher", 
+    "IMDbEnricher",
     "TrailerEnricher",
     "MetadataEnricher",
     "DistributionLikelihoodScorer",
     "JSONExporter",
-    "CSVExporter", 
+    "CSVExporter",
     "MarkdownExporter"
 ]

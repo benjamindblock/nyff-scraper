@@ -32,7 +32,12 @@ class TrailerEnricher:
         translator = str.maketrans("", "", string.punctuation)
         return " ".join(text.lower().translate(translator).split())
 
-    def search_youtube_trailer(self, title: str, year: str, director: str = "", is_restoration: bool = False) -> Optional[str]:
+    def search_youtube_trailer(
+            self,
+            title: str,
+            year: str,
+            director: str = "",
+            is_restoration: bool = False) -> Optional[str]:
         """Search YouTube for a film trailer, validating against the film title."""
         try:
             query_parts = [title]
@@ -64,33 +69,44 @@ class TrailerEnricher:
                     vresp.raise_for_status()
 
                     # Extract <title> tag from the HTML
-                    m = re.search(r"<title>(.*?)</title>", vresp.text, re.IGNORECASE | re.DOTALL)
+                    m = re.search(
+                        r"<title>(.*?)</title>",
+                        vresp.text,
+                        re.IGNORECASE | re.DOTALL)
                     if not m:
                         continue
 
                     video_title = m.group(1)
                     video_title_norm = self.normalize_text(video_title)
 
-                    # Check if most of the film title words appear in video title
+                    # Check if most of the film title words appear in video
+                    # title
                     film_words = set(film_norm.split())
-                    overlap = sum(1 for w in film_words if w in video_title_norm)
+                    overlap = sum(
+                        1 for w in film_words if w in video_title_norm)
 
                     if film_words and overlap / len(film_words) >= 0.6:
-                        logger.info(f"Matched trailer for '{title}' -> {video_url} ({video_title.strip()})")
+                        logger.info(
+                            f"Matched trailer for '{title}' -> {video_url} ({video_title.strip()})")
                         return video_url
 
                 except Exception as e:
                     logger.debug(f"Error checking video {vid}: {e}")
                     continue
 
-            logger.warning(f"No matching trailer found for '{title}' after checking candidates")
+            logger.warning(
+                f"No matching trailer found for '{title}' after checking candidates")
             return ""
 
         except Exception as e:
             logger.error(f"Error searching YouTube for '{title}': {e}")
             return ""
 
-    def construct_youtube_search_url(self, title: str, year: str, director: str = "") -> str:
+    def construct_youtube_search_url(
+            self,
+            title: str,
+            year: str,
+            director: str = "") -> str:
         """Construct a YouTube search URL for manual searching.
 
         Args:
@@ -111,7 +127,7 @@ class TrailerEnricher:
         return f"https://www.youtube.com/results?search_query={query}"
 
     def enrich_films(self, films: List[Dict], search_trailers: bool = True,
-                    limit: int = None) -> List[Dict]:
+                     limit: int = None) -> List[Dict]:
         """Enrich films with YouTube trailer URLs.
 
         Args:
@@ -129,7 +145,8 @@ class TrailerEnricher:
         enriched_films = []
 
         for i, film in enumerate(films):
-            logger.info(f"Processing film {i+1}/{len(films)}: {film.get('title', 'Unknown')}")
+            logger.info(
+                f"Processing film {i + 1}/{len(films)}: {film.get('title', 'Unknown')}")
 
             title = film.get('title', '')
             year = film.get('year', '')
@@ -138,23 +155,27 @@ class TrailerEnricher:
 
             # Skip trailer search for shorts programs
             if is_short_program:
-                logger.info(f"Skipping trailer search for shorts program: {title}")
+                logger.info(
+                    f"Skipping trailer search for shorts program: {title}")
                 film['trailer_url'] = ""
                 film['youtube_search_url'] = ""
             elif search_trailers and title and year:
                 # Active search for trailer
-                trailer_url = self.search_youtube_trailer(title, year, director)
+                trailer_url = self.search_youtube_trailer(
+                    title, year, director)
                 film['trailer_url'] = trailer_url
                 # Be nice to Google - delay between searches
                 time.sleep(2)
 
                 # Always provide manual search URL
-                film['youtube_search_url'] = self.construct_youtube_search_url(title, year, director)
+                film['youtube_search_url'] = self.construct_youtube_search_url(
+                    title, year, director)
             else:
                 # Just provide manual search URL
                 film['trailer_url'] = ""
                 if title and year:
-                    film['youtube_search_url'] = self.construct_youtube_search_url(title, year, director)
+                    film['youtube_search_url'] = self.construct_youtube_search_url(
+                        title, year, director)
                 else:
                     film['youtube_search_url'] = ""
 
